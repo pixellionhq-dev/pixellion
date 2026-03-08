@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  buyer        Buyer?
+
+  @@map("users")
+}
+
+model Buyer {
+  id        String     @id @default(uuid())
+  country   String     @default("US")
+  flag      String     @default("🇺🇸")
+  color     String     @default("#0a0a0a")
+  userId    String     @unique @map("user_id")
+  user      User       @relation(fields: [userId], references: [id])
+  createdAt DateTime   @default(now()) @map("created_at")
+  pixels    Pixel[]
+  purchases Purchase[]
+
+  @@map("buyers")
+}
+
+model Pixel {
+  id          String   @id @default(uuid())
+  x           Int
+  y           Int
+  ownerId     String   @map("owner_id")
+  owner       Buyer    @relation(fields: [ownerId], references: [id])
+  purchaseId  String   @map("purchase_id")
+  purchase    Purchase @relation(fields: [purchaseId], references: [id])
+  color       String   @default("#0a0a0a")
+  purchasedAt DateTime @default(now()) @map("purchased_at")
+
+  @@unique([x, y])
+  @@index([ownerId])
+  @@index([purchaseId])
+  @@map("pixels")
+}
+
+model Purchase {
+  id         String   @id @default(uuid())
+  buyerId    String   @map("buyer_id")
+  buyer      Buyer    @relation(fields: [buyerId], references: [id])
+  brandName  String   @map("brand_name")
+  url         String?
+  logoUrl     String?  @map("logo_url")
+  fitMode     String   @default("cover") @map("fit_mode")
+  imageWidth  Int?     @map("image_width")
+  imageHeight Int?     @map("image_height")
+  pixelCount  Int      @map("pixel_count")
+  totalPrice  Float    @map("total_price")
+  createdAt  DateTime @default(now()) @map("created_at")
+  pixels     Pixel[]
+
+  @@index([buyerId])
+  @@map("purchases")
+}
