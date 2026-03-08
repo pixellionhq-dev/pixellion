@@ -11,7 +11,8 @@ export const usePixels = () => {
     });
 
     const purchaseMutation = useMutation({
-        mutationFn: ({ pixels, color, brandName, brandUrl, file, onUploadProgress }) => purchasePixels(pixels, color, brandName, brandUrl, file, onUploadProgress),
+        mutationFn: ({ pixels, color, brandName, brandUrl, file, onUploadProgress, fitMode, imageWidth, imageHeight }) =>
+            purchasePixels(pixels, color, brandName, brandUrl, file, onUploadProgress, fitMode, imageWidth, imageHeight),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['pixels'] });
             queryClient.invalidateQueries({ queryKey: ['stats'] });

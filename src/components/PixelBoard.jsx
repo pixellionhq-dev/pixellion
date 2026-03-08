@@ -10,6 +10,7 @@ import BrandSearch from './BrandSearch';
 import HeatmapOverlay from './HeatmapOverlay';
 import Button from './ui/Button';
 import Input from './ui/Input';
+import { apiClient } from '../api/client';
 import {
     BOARD_WIDTH, BOARD_HEIGHT,
     GRID_LEVELS, GRID_OVERLAY_COLOR, GRID_OVERLAY_MIN_CELL,
@@ -72,6 +73,7 @@ export default function PixelBoard() {
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState(null);
     const [dragEnd, setDragEnd] = useState(null);
+    const isDraggingRef = useRef(false);
     const currentDragStart = useRef(null);
     const currentDragEnd = useRef(null);
 
@@ -104,9 +106,105 @@ export default function PixelBoard() {
         return 'AVAILABLE';
     }, [ownedMap, selectedPixels]);
 
+    // Precompute per-purchase geometry once per pixels payload update.
+    const precomputedBlocks = useMemo(() => {
+        const groups = new Map();
+
+        (ownedPixels || []).forEach((p) => {
+            const groupId = p.purchaseId || p.ownerId;
+            const existing = groups.get(groupId);
+
+            if (!existing) {
+                groups.set(groupId, {
+                    groupId,
+                    color: p.color,
+                    ownerLogo: p.ownerLogo,
+                    logoUrl: p.logoUrl,
+                    fitMode: p.fitMode,
+                    imageWidth: p.imageWidth,
+                    imageHeight: p.imageHeight,
+                    minX: p.x,
+                    maxX: p.x,
+                    minY: p.y,
+                    maxY: p.y,
+                });
+                return;
+            }
+
+            if (p.x < existing.minX) existing.minX = p.x;
+            if (p.x > existing.maxX) existing.maxX = p.x;
+            if (p.y < existing.minY) existing.minY = p.y;
+            if (p.y > existing.maxY) existing.maxY = p.y;
+        });
+
+        return Array.from(groups.values());
+    }, [ownedPixels]);
+
     const imageCache = useRef(new Map());
-    const renderFrame = useRef(null);
-    const overlayRenderFrame = useRef(null);
+    const redrawFrame = useRef(null);
+    const requestRedrawRef = useRef(() => { });
+    const hoveredKeyRef = useRef('');
+    const lastCursorPosRef = useRef({ x: 0, y: 0 });
+    const lastTooltipPosRef = useRef({ x: 0, y: 0 });
+    const lastNearMinimapRef = useRef(false);
+
+    const resolveLogoUrl = useCallback((logoPath) => {
+        if (!logoPath) return '';
+        if (/^(blob:|data:)/i.test(logoPath)) return logoPath;
+
+        const baseURL = apiClient.defaults.baseURL || window.location.origin;
+
+        if (/^https?:\/\//i.test(logoPath)) {
+            try {
+                const incoming = new URL(logoPath);
+                const incomingHost = incoming.hostname.toLowerCase();
+                const isLocalHost = incomingHost === 'localhost' || incomingHost === '127.0.0.1' || incomingHost === '::1';
+
+                if (!isLocalHost) return logoPath;
+
+                const apiBase = new URL(baseURL);
+                return new URL(`${incoming.pathname}${incoming.search}${incoming.hash}`, apiBase).toString();
+            } catch {
+                return logoPath;
+            }
+        }
+
+        const normalizedPath = logoPath.startsWith('/uploads/')
+            ? logoPath
+            : `/uploads/${logoPath.split('/').pop()}`;
+
+        return new URL(normalizedPath, baseURL).toString();
+    }, []);
+
+    const drawLogoWithFit = useCallback((ctx, img, fitMode, imageWidth, imageHeight, x, y, w, h) => {
+        const safeFit = (fitMode || 'cover').toLowerCase();
+        const srcW = imageWidth || img.naturalWidth || img.width;
+        const srcH = imageHeight || img.naturalHeight || img.height;
+
+        if (!srcW || !srcH || w <= 0 || h <= 0) return;
+
+        if (safeFit === 'fill') {
+            ctx.drawImage(img, x, y, w, h);
+            return;
+        }
+
+        if (safeFit === 'contain') {
+            const scale = Math.min(w / srcW, h / srcH);
+            const dw = srcW * scale;
+            const dh = srcH * scale;
+            const dx = x + (w - dw) / 2;
+            const dy = y + (h - dh) / 2;
+            ctx.drawImage(img, dx, dy, dw, dh);
+            return;
+        }
+
+        const scale = Math.max(w / srcW, h / srcH);
+        const cropW = w / scale;
+        const cropH = h / scale;
+        const sx = (srcW - cropW) / 2;
+        const sy = (srcH - cropH) / 2;
+        ctx.drawImage(img, sx, sy, cropW, cropH, x, y, w, h);
+    }, []);
 
     // --- Coordinate transforms ---
     const boardToScreen = useCallback((bx, by) => {
@@ -191,22 +289,19 @@ export default function PixelBoard() {
 
     // --- Draw base board (grid + owned pixels + logos) ---
     const drawBaseBoard = useCallback(() => {
-        if (renderFrame.current) cancelAnimationFrame(renderFrame.current);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const { w, h } = canvasSize;
 
-        renderFrame.current = requestAnimationFrame(() => {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const dpr = window.devicePixelRatio || 1;
-            const { w, h } = canvasSize;
-
-            if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-                canvas.width = w * dpr;
-                canvas.height = h * dpr;
-                canvas.style.width = `${w}px`;
-                canvas.style.height = `${h}px`;
-                ctx.scale(dpr, dpr);
-            }
+        if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = `${w}px`;
+            canvas.style.height = `${h}px`;
+            ctx.scale(dpr, dpr);
+        }
 
             const c = camera.current;
             const cellScreen = c.zoom; // pixels per cell on screen
@@ -225,31 +320,29 @@ export default function PixelBoard() {
             const endCol = Math.min(BOARD_WIDTH, Math.ceil(c.x + w / c.zoom));
             const endRow = Math.min(BOARD_HEIGHT, Math.ceil(c.y + h / c.zoom));
 
-            // 1. Group owned pixels by purchase/owner
-            const purchaseMap = new Map();
-            (ownedPixels || []).forEach(p => {
-                // Skip pixels completely outside visible range
-                if (p.x < startCol - 50 || p.x > endCol + 50 || p.y < startRow - 50 || p.y > endRow + 50) return;
-                const groupId = p.purchaseId || p.ownerId;
-                if (!purchaseMap.has(groupId)) {
-                    purchaseMap.set(groupId, { ...p, pixels: [] });
-                }
-                purchaseMap.get(groupId).pixels.push(p);
+            // 1. Visible block filtering from precomputed geometry
+            const visibleBlocks = precomputedBlocks.filter((block) => {
+                if (block.maxX < startCol - 50) return false;
+                if (block.minX > endCol + 50) return false;
+                if (block.maxY < startRow - 50) return false;
+                if (block.minY > endRow + 50) return false;
+                return true;
             });
-            const blocks = Array.from(purchaseMap.values());
+
+            const visibleDrawBlocks = visibleBlocks.map((block) => {
+                const tl = boardToScreen(block.minX, block.minY);
+                const br = boardToScreen(block.maxX + 1, block.maxY + 1);
+                return {
+                    block,
+                    tl,
+                    br,
+                    drawW: br.x - tl.x,
+                    drawH: br.y - tl.y,
+                };
+            });
 
             // 2. Draw block backgrounds
-            blocks.forEach(block => {
-                const xs = block.pixels.map(p => p.x);
-                const ys = block.pixels.map(p => p.y);
-                const minX = Math.min(...xs);
-                const maxX = Math.max(...xs);
-                const minY = Math.min(...ys);
-                const maxY = Math.max(...ys);
-
-                const tl = boardToScreen(minX, minY);
-                const br = boardToScreen(maxX + 1, maxY + 1);
-
+            visibleDrawBlocks.forEach(({ block, tl, br }) => {
                 ctx.fillStyle = block.color || '#000000';
                 ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
             });
@@ -270,14 +363,21 @@ export default function PixelBoard() {
 
                 const colStart = Math.ceil(startCol / level.step) * level.step;
                 const colEnd = Math.floor(endCol / level.step) * level.step;
+                const colLines = Math.max(0, Math.floor((colEnd - colStart) / level.step) + 1);
+                const rowStart = Math.ceil(startRow / level.step) * level.step;
+                const rowEnd = Math.floor(endRow / level.step) * level.step;
+                const rowLines = Math.max(0, Math.floor((rowEnd - rowStart) / level.step) + 1);
+
+                // Skip overly dense grids even if technically visible at this zoom.
+                const totalLines = colLines + rowLines;
+                if (totalLines > 1200) continue;
+
                 for (let col = colStart; col <= colEnd; col += level.step) {
                     const sx = (col - c.x) * c.zoom;
                     ctx.moveTo(Math.round(sx), bTop);
                     ctx.lineTo(Math.round(sx), bBot);
                 }
 
-                const rowStart = Math.ceil(startRow / level.step) * level.step;
-                const rowEnd = Math.floor(endRow / level.step) * level.step;
                 for (let row = rowStart; row <= rowEnd; row += level.step) {
                     const sy = (row - c.y) * c.zoom;
                     ctx.moveTo(bLeft, Math.round(sy));
@@ -288,40 +388,41 @@ export default function PixelBoard() {
 
             // 4. Draw logos
             ctx.imageSmoothingEnabled = false;
-            blocks.forEach(block => {
+            visibleDrawBlocks.forEach(({ block, tl, br, drawW, drawH }) => {
                 const logoToUse = block.ownerLogo || block.logoUrl;
                 if (!logoToUse) return;
-
-                const xs = block.pixels.map(p => p.x);
-                const ys = block.pixels.map(p => p.y);
-                const minX = Math.min(...xs);
-                const maxX = Math.max(...xs);
-                const minY = Math.min(...ys);
-                const maxY = Math.max(...ys);
-
-                const tl = boardToScreen(minX, minY);
-                const br = boardToScreen(maxX + 1, maxY + 1);
-                const drawW = br.x - tl.x;
-                const drawH = br.y - tl.y;
 
                 // Skip if too small to see
                 if (drawW < 2 || drawH < 2) return;
 
                 if (!imageCache.current.has(logoToUse)) {
-                    imageCache.current.set(logoToUse, 'loading');
+                    imageCache.current.set(logoToUse, { status: 'loading' });
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
                     img.onload = () => {
-                        imageCache.current.set(logoToUse, img);
-                        requestAnimationFrame(drawBaseBoard);
+                        imageCache.current.set(logoToUse, { status: 'ready', img });
+                        requestRedrawRef.current();
                     };
-                    img.src = logoToUse.startsWith('http') ? logoToUse : `http://localhost:3001/uploads/${logoToUse.split('/').pop()}`;
+                    img.onerror = () => {
+                        imageCache.current.set(logoToUse, { status: 'error' });
+                    };
+                    img.src = resolveLogoUrl(logoToUse);
                 } else {
-                    const img = imageCache.current.get(logoToUse);
-                    if (img && img !== 'loading') {
+                    const cached = imageCache.current.get(logoToUse);
+                    if (cached?.status === 'ready' && cached.img) {
                         ctx.fillStyle = '#FFFFFF';
                         ctx.fillRect(tl.x, tl.y, drawW, drawH);
-                        ctx.drawImage(img, tl.x, tl.y, drawW, drawH);
+                        drawLogoWithFit(
+                            ctx,
+                            cached.img,
+                            block.fitMode,
+                            block.imageWidth,
+                            block.imageHeight,
+                            tl.x,
+                            tl.y,
+                            drawW,
+                            drawH
+                        );
                     }
                 }
             });
@@ -348,27 +449,23 @@ export default function PixelBoard() {
             ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 1;
             ctx.strokeRect(boardTopLeft.x, boardTopLeft.y, boardBottomRight.x - boardTopLeft.x, boardBottomRight.y - boardTopLeft.y);
-        });
-    }, [ownedPixels, canvasSize, boardToScreen]);
+    }, [precomputedBlocks, canvasSize, boardToScreen, drawLogoWithFit, resolveLogoUrl]);
 
     // --- Draw overlay (hover, selection, drag preview) ---
     const drawOverlayBoard = useCallback(() => {
-        if (overlayRenderFrame.current) cancelAnimationFrame(overlayRenderFrame.current);
+        const canvas = overlayCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const { w, h } = canvasSize;
 
-        overlayRenderFrame.current = requestAnimationFrame(() => {
-            const canvas = overlayCanvasRef.current;
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const dpr = window.devicePixelRatio || 1;
-            const { w, h } = canvasSize;
-
-            if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-                canvas.width = w * dpr;
-                canvas.height = h * dpr;
-                canvas.style.width = `${w}px`;
-                canvas.style.height = `${h}px`;
-                ctx.scale(dpr, dpr);
-            }
+        if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = `${w}px`;
+            canvas.style.height = `${h}px`;
+            ctx.scale(dpr, dpr);
+        }
 
             ctx.clearRect(0, 0, w, h);
             const c = camera.current;
@@ -461,23 +558,28 @@ export default function PixelBoard() {
 
             // Keep animating for marching ants
             if (selectedPixels.size > 0 || isDragging || hoveredPixel || purchaseHighlight.current) {
-                overlayRenderFrame.current = requestAnimationFrame(drawOverlayBoard);
+                requestRedrawRef.current();
             }
-        });
     }, [selectedPixels, hoveredPixel, isDragging, canvasSize, boardToScreen]);
 
-    // Re-render on data or camera changes
-    useEffect(() => { drawBaseBoard(); }, [drawBaseBoard]);
-    useEffect(() => {
-        drawOverlayBoard();
-        return () => { if (overlayRenderFrame.current) cancelAnimationFrame(overlayRenderFrame.current); };
-    }, [drawOverlayBoard, isDragging, dragStart, dragEnd, hoveredPixel]);
-
-    // --- Continuous render loop for smooth camera ---
+    // --- Single frame scheduler for all board redraw requests ---
     const scheduleRedraw = useCallback(() => {
-        drawBaseBoard();
-        drawOverlayBoard();
+        if (redrawFrame.current) return;
+        redrawFrame.current = requestAnimationFrame(() => {
+            redrawFrame.current = null;
+            drawBaseBoard();
+            drawOverlayBoard();
+        });
     }, [drawBaseBoard, drawOverlayBoard]);
+
+    useEffect(() => {
+        requestRedrawRef.current = scheduleRedraw;
+    }, [scheduleRedraw]);
+
+    // Re-render on data or interactive overlay changes
+    useEffect(() => {
+        scheduleRedraw();
+    }, [scheduleRedraw, isDragging, dragStart, dragEnd, hoveredPixel]);
 
     // --- Mini-map navigation callback ---
     const onMiniMapNavigate = useCallback((boardX, boardY) => {
@@ -600,6 +702,7 @@ export default function PixelBoard() {
     useEffect(() => {
         return () => {
             if (zoomAnimFrame.current) cancelAnimationFrame(zoomAnimFrame.current);
+            if (redrawFrame.current) cancelAnimationFrame(redrawFrame.current);
         };
     }, []);
 
@@ -665,7 +768,12 @@ export default function PixelBoard() {
     // --- Pointer handlers ---
     const handleMouseDown = useCallback((e) => {
         e.preventDefault();
-        e.target.setPointerCapture(e.pointerId);
+        const canvas = overlayCanvasRef.current;
+        if (canvas && typeof canvas.setPointerCapture === 'function' && typeof e.pointerId === 'number') {
+            try {
+                canvas.setPointerCapture(e.pointerId);
+            } catch { }
+        }
 
         const rect = overlayCanvasRef.current.getBoundingClientRect();
         const sx = e.clientX - rect.left;
@@ -698,6 +806,7 @@ export default function PixelBoard() {
 
         if (!owner) {
             setIsDragging(true);
+            isDraggingRef.current = true;
             setDragStart(pixel);
             setDragEnd(pixel);
             currentDragStart.current = pixel;
@@ -707,7 +816,14 @@ export default function PixelBoard() {
 
     const handleMouseMove = useCallback((e) => {
         e.preventDefault();
-        setCursorPos({ x: e.clientX, y: e.clientY });
+        if (e.currentTarget === window && !isPanning.current && !isDraggingRef.current) {
+            return;
+        }
+
+        if (lastCursorPosRef.current.x !== e.clientX || lastCursorPosRef.current.y !== e.clientY) {
+            lastCursorPosRef.current = { x: e.clientX, y: e.clientY };
+            setCursorPos(lastCursorPosRef.current);
+        }
 
         // Panning
         if (isPanning.current) {
@@ -726,20 +842,33 @@ export default function PixelBoard() {
             const rect = container.getBoundingClientRect();
             const distRight = rect.right - e.clientX;
             const distBottom = rect.bottom - e.clientY;
-            setCursorNearMinimap(distRight < 200 && distBottom < 200);
+            const nearMinimap = distRight < 200 && distBottom < 200;
+            if (lastNearMinimapRef.current !== nearMinimap) {
+                lastNearMinimapRef.current = nearMinimap;
+                setCursorNearMinimap(nearMinimap);
+            }
         }
 
         if (isDragging) {
             const pixel = getPixelFromEvent(e);
             currentDragEnd.current = pixel;
             setDragEnd(pixel);
-            requestAnimationFrame(drawOverlayBoard);
+            scheduleRedraw();
         } else {
             const pixel = getPixelFromEvent(e);
-            if (!pixel) { setHoveredPixel(null); return; }
+            if (!pixel) {
+                if (hoveredKeyRef.current !== '') {
+                    hoveredKeyRef.current = '';
+                    setHoveredPixel(null);
+                }
+                return;
+            }
             const key = `${pixel.x},${pixel.y}`;
 
-            setTooltipPos({ x: e.clientX, y: e.clientY });
+            if (lastTooltipPosRef.current.x !== e.clientX || lastTooltipPosRef.current.y !== e.clientY) {
+                lastTooltipPosRef.current = { x: e.clientX, y: e.clientY };
+                setTooltipPos(lastTooltipPosRef.current);
+            }
 
             const owner = ownedMap.get(key);
             const isOwned = !!owner;
@@ -752,12 +881,30 @@ export default function PixelBoard() {
                 }
             }
 
-            setHoveredPixel(owner ? { ...owner, x: pixel.x, y: pixel.y, isOwned: true } : { x: pixel.x, y: pixel.y, isOwned: false });
+            const nextHoverKey = isOwned
+                ? `${key}:owned:${owner.ownerId || owner.purchaseId || owner.ownerName || ''}`
+                : `${key}:free`;
+
+            if (hoveredKeyRef.current !== nextHoverKey) {
+                hoveredKeyRef.current = nextHoverKey;
+                setHoveredPixel(owner ? { ...owner, x: pixel.x, y: pixel.y, isOwned: true } : { x: pixel.x, y: pixel.y, isOwned: false });
+            }
         }
-    }, [getPixelFromEvent, isDragging, ownedMap, drawOverlayBoard, clampCamera, scheduleRedraw]);
+    }, [getPixelFromEvent, isDragging, ownedMap, clampCamera, scheduleRedraw]);
 
     const handleMouseUp = useCallback((e) => {
-        e.target.releasePointerCapture(e.pointerId);
+        const canvas = overlayCanvasRef.current;
+        if (
+            canvas
+            && typeof e.pointerId === 'number'
+            && typeof canvas.hasPointerCapture === 'function'
+            && canvas.hasPointerCapture(e.pointerId)
+            && typeof canvas.releasePointerCapture === 'function'
+        ) {
+            try {
+                canvas.releasePointerCapture(e.pointerId);
+            } catch { }
+        }
 
         if (isPanning.current) {
             isPanning.current = false;
@@ -767,8 +914,12 @@ export default function PixelBoard() {
             return;
         }
 
-        if (!isDragging) return;
+        if (!isDragging) {
+            isDraggingRef.current = false;
+            return;
+        }
         setIsDragging(false);
+        isDraggingRef.current = false;
 
         if (dragStart && dragEnd) {
             const isClick = dragStart.x === dragEnd.x && dragStart.y === dragEnd.y;
@@ -818,29 +969,79 @@ export default function PixelBoard() {
     }, [isDragging, dragStart, dragEnd, getPixelState]);
 
     const handleMouseLeave = useCallback(() => {
-        setHoveredPixel(null);
-        if (isDragging) handleMouseUp({ shiftKey: false, target: overlayCanvasRef.current, pointerId: 0, releasePointerCapture: () => { } });
-    }, [isDragging, handleMouseUp]);
+        if (hoveredKeyRef.current !== '') {
+            hoveredKeyRef.current = '';
+            setHoveredPixel(null);
+        }
+    }, []);
 
     // Attach pointer events
     useEffect(() => {
         const canvas = overlayCanvasRef.current;
         if (!canvas) return;
+        const supportsPointerEvents = typeof window !== 'undefined' && 'PointerEvent' in window;
 
-        const stopTouch = (e) => e.preventDefault();
-        canvas.addEventListener('touchstart', stopTouch, { passive: false });
-        canvas.addEventListener('touchmove', stopTouch, { passive: false });
-        canvas.addEventListener('pointerdown', handleMouseDown, { passive: false });
-        canvas.addEventListener('pointermove', handleMouseMove, { passive: false });
-        window.addEventListener('pointerup', handleMouseUp);
+        const toMouseLikeEvent = (touchEvent) => {
+            const touch = touchEvent.touches[0] || touchEvent.changedTouches[0];
+            if (!touch) return null;
+            return {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                button: 0,
+                pointerId: undefined,
+                preventDefault: () => touchEvent.preventDefault(),
+                currentTarget: touchEvent.currentTarget,
+            };
+        };
+
+        const handleTouchStart = (e) => {
+            const evt = toMouseLikeEvent(e);
+            if (evt) handleMouseDown(evt);
+        };
+        const handleTouchMove = (e) => {
+            const evt = toMouseLikeEvent(e);
+            if (evt) handleMouseMove(evt);
+        };
+        const handleTouchEnd = (e) => {
+            const evt = toMouseLikeEvent(e);
+            if (evt) handleMouseUp(evt);
+        };
+
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+        if (supportsPointerEvents) {
+            canvas.addEventListener('pointerdown', handleMouseDown, { passive: false });
+            canvas.addEventListener('pointermove', handleMouseMove, { passive: false });
+            window.addEventListener('pointermove', handleMouseMove, { passive: false });
+            window.addEventListener('pointerup', handleMouseUp);
+            window.addEventListener('pointercancel', handleMouseUp);
+        } else {
+            canvas.addEventListener('mousedown', handleMouseDown, { passive: false });
+            window.addEventListener('mousemove', handleMouseMove, { passive: false });
+            window.addEventListener('mouseup', handleMouseUp);
+        }
         canvas.addEventListener('pointerleave', handleMouseLeave);
 
         return () => {
-            canvas.removeEventListener('touchstart', stopTouch);
-            canvas.removeEventListener('touchmove', stopTouch);
-            canvas.removeEventListener('pointerdown', handleMouseDown);
-            canvas.removeEventListener('pointermove', handleMouseMove);
-            window.removeEventListener('pointerup', handleMouseUp);
+            canvas.removeEventListener('touchstart', handleTouchStart);
+            canvas.removeEventListener('touchmove', handleTouchMove);
+            canvas.removeEventListener('touchend', handleTouchEnd);
+            canvas.removeEventListener('touchcancel', handleTouchEnd);
+
+            if (supportsPointerEvents) {
+                canvas.removeEventListener('pointerdown', handleMouseDown);
+                canvas.removeEventListener('pointermove', handleMouseMove);
+                window.removeEventListener('pointermove', handleMouseMove);
+                window.removeEventListener('pointerup', handleMouseUp);
+                window.removeEventListener('pointercancel', handleMouseUp);
+            } else {
+                canvas.removeEventListener('mousedown', handleMouseDown);
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            }
             canvas.removeEventListener('pointerleave', handleMouseLeave);
         };
     }, [handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave]);
@@ -909,7 +1110,7 @@ export default function PixelBoard() {
                     bounds: { minX: Math.min(...pxs), minY: Math.min(...pys), maxX: Math.max(...pxs), maxY: Math.max(...pys) },
                     startTime: performance.now()
                 };
-                drawOverlayBoard();
+                scheduleRedraw();
             }
         } catch (err) {
             queryClient.setQueryData(['pixels'], backupPixels);
