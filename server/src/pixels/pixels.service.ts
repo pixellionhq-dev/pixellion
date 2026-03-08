@@ -70,7 +70,7 @@ export class PixelsService {
             const ext = extname(file.originalname);
             const filename = `${uuidv4()}${ext}`;
             await writeFile(`./uploads/${filename}`, file.buffer);
-            finalLogoUrl = `http://localhost:3001/uploads/${filename}`;
+            finalLogoUrl = `${process.env.API_URL || 'https://pixellion-ilos.onrender.com'}/uploads/${filename}`;
         }
 
         // Find buyer for this user
