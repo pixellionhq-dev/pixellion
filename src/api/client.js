@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const apiClient = axios.create({
-    baseURL: 'http://localhost:3001',
+    baseURL: 'https://pixellion-ilos.onrender.com',
     withCredentials: true,
 });
 
