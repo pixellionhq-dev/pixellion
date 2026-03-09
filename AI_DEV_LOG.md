@@ -112,4 +112,42 @@ AI_DEV_LOG.md
 DESCRIPTION OF CHANGE
 Improved logo loading speed and reliability on PixelBoard by normalizing logo URLs with API base plus optional R2/CDN public base support, rewriting localhost absolute URLs to production-safe endpoints, and preserving blob/data URLs. Updated image cache behavior to deduplicate by normalized URL, add async decode hints, enforce loading timeout fail-safe to avoid stuck loading state, mark errors explicitly, trigger redraw on load/error, and keep cache lightweight with bounded size eviction.
 REASON
+Ensure logos display correctly on all deployments and never get stuck in loading state; reduce redundant network fetches.
+
+---
+
+2026-03-09
+AI TOOL USED
+GitHub Copilot (Claude Opus 4.6)
+FILES MODIFIED
+src/utils/imageCache.js (new)
+src/components/PixelBoard.jsx
+AI_DEV_LOG.md
+DESCRIPTION OF CHANGE
+Problem 1 — Logo loading speed:
+Created src/utils/imageCache.js — shared singleton image cache with bounded LRU eviction (1200 max), deduplication of in-flight loads, 15s timeout fail-safe, async decode, and a simple texture atlas (2048x2048 OffscreenCanvas, 128x128 slots, 256 logos) for GPU-friendly batch drawing.
+Replaced inline imageCache ref in PixelBoard with the new ImageCache module. Draw loop now prefers atlas drawImage (single GPU texture source) with fallback to per-image drawLogoWithFit.
+Added preloadBatch effect so all logo URLs from precomputedBlocks are preloaded on pixel data change.
+Wired ImageCache.setRedrawCallback to scheduleRedraw so images trigger repaint on load/error.
+
+Problem 2 — Mobile navigation:
+Implemented full touch gesture system in PixelBoard with a state machine (touchState ref).
+One finger tap selects pixel (via 80ms disambiguation timer).
+One finger drag pans canvas (promoted from waiting when movement exceeds 8px).
+Two finger drag pans canvas (handled via pinch handler midpoint tracking).
+Pinch gesture zooms canvas (distance-ratio based, keeps midpoint board-space anchor stable).
+Pinch to lift one finger transitions seamlessly to one-finger pan.
+All gestures prevent page scroll via preventDefault.
+MiniMap stays synced through existing camera ref plus clampCamera plus scheduleRedraw pipeline.
+
+Problem 3 — Platform independence:
+Pointer events remain primary input system (mouse plus stylus plus desktop).
+Touch events handled separately via dedicated gesture handlers (not proxied through pointer shims).
+Mouse events remain as fallback for browsers without PointerEvent support.
+Added Safari trackpad gesture support (gesturestart/gesturechange events).
+Improved wheel handler: detects ctrlKey (trackpad pinch translated by browser) for smooth pinch-to-zoom.
+Desktop behavior completely unchanged.
+
+REASON
+Logos loaded slowly due to per-frame fetching without preloading or atlas batching. Mobile users could not pan/zoom because touch events were forced through single-finger mouse shims. Platform inconsistency across Safari trackpad, desktop mouse, mobile touch, and tablet stylus required unified but separate input handling.
 Ensure production-safe logo resolution and faster repeated canvas renders while preventing duplicate loads and non-terminating loading states.

@@ -11,6 +11,7 @@ import HeatmapOverlay from './HeatmapOverlay';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import { apiClient } from '../api/client';
+import * as ImageCache from '../utils/imageCache';
 import {
     BOARD_WIDTH, BOARD_HEIGHT,
     GRID_LEVELS, GRID_OVERLAY_COLOR, GRID_OVERLAY_MIN_CELL,
@@ -140,9 +141,6 @@ export default function PixelBoard() {
         return Array.from(groups.values());
     }, [ownedPixels]);
 
-    const imageCache = useRef(new Map());
-    const IMAGE_CACHE_MAX = 1200;
-    const IMAGE_LOADING_TIMEOUT_MS = 15000;
     const redrawFrame = useRef(null);
     const requestRedrawRef = useRef(() => { });
     const hoveredKeyRef = useRef('');
@@ -150,19 +148,16 @@ export default function PixelBoard() {
     const lastTooltipPosRef = useRef({ x: 0, y: 0 });
     const lastNearMinimapRef = useRef(false);
 
-    const setImageCacheEntry = useCallback((key, entry) => {
-        const cache = imageCache.current;
-        cache.set(key, entry);
-
-        // Lightweight cap to keep memory bounded over long sessions.
-        if (cache.size <= IMAGE_CACHE_MAX) return;
-        for (const [k, v] of cache) {
-            if (k === key) continue;
-            if (v?.status === 'loading') continue;
-            cache.delete(k);
-            break;
-        }
-    }, []);
+    // Mobile gesture state
+    const touchState = useRef({
+        type: 'none',       // 'none' | 'waiting' | 'select' | 'pan' | 'pinch'
+        startTouches: null,  // initial touch(es) snapshot
+        startCamera: null,   // camera at gesture start
+        startDist: 0,        // initial pinch distance
+        startZoom: 0,        // zoom at pinch start
+        startMidBoard: null, // board-space midpoint at pinch start
+        waitTimer: null,     // 80ms timer to disambiguate tap vs pan
+    });
 
     const resolveLogoUrl = useCallback((logoPath) => {
         if (!logoPath) return '';
@@ -417,8 +412,9 @@ export default function PixelBoard() {
                 ctx.stroke();
             }
 
-            // 4. Draw logos
+            // 4. Draw logos — uses shared ImageCache module with atlas support
             ctx.imageSmoothingEnabled = false;
+            const atlasCanvas = ImageCache.getAtlasCanvas();
             visibleDrawBlocks.forEach(({ block, tl, br, drawW, drawH }) => {
                 const logoToUse = block.ownerLogo || block.logoUrl;
                 if (!logoToUse) return;
@@ -428,49 +424,28 @@ export default function PixelBoard() {
                 // Skip if too small to see
                 if (drawW < 2 || drawH < 2) return;
 
-                if (!imageCache.current.has(resolvedLogoUrl)) {
-                    const loadStartedAt = Date.now();
-                    setImageCacheEntry(resolvedLogoUrl, { status: 'loading', startedAt: loadStartedAt });
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    img.decoding = 'async';
+                const entry = ImageCache.load(resolvedLogoUrl);
+                if (!entry || entry.status !== 'ready') return;
 
-                    const timeoutId = window.setTimeout(() => {
-                        const entry = imageCache.current.get(resolvedLogoUrl);
-                        if (entry?.status === 'loading' && entry.startedAt === loadStartedAt) {
-                            setImageCacheEntry(resolvedLogoUrl, { status: 'error', failedAt: Date.now() });
-                            requestRedrawRef.current();
-                        }
-                    }, IMAGE_LOADING_TIMEOUT_MS);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(tl.x, tl.y, drawW, drawH);
 
-                    img.onload = () => {
-                        window.clearTimeout(timeoutId);
-                        setImageCacheEntry(resolvedLogoUrl, { status: 'ready', img, loadedAt: Date.now() });
-                        requestRedrawRef.current();
-                    };
-                    img.onerror = () => {
-                        window.clearTimeout(timeoutId);
-                        setImageCacheEntry(resolvedLogoUrl, { status: 'error', failedAt: Date.now() });
-                        requestRedrawRef.current();
-                    };
-                    img.src = resolvedLogoUrl;
-                } else {
-                    const cached = imageCache.current.get(resolvedLogoUrl);
-                    if (cached?.status === 'ready' && cached.img) {
-                        ctx.fillStyle = '#FFFFFF';
-                        ctx.fillRect(tl.x, tl.y, drawW, drawH);
-                        drawLogoWithFit(
-                            ctx,
-                            cached.img,
-                            block.fitMode,
-                            block.imageWidth,
-                            block.imageHeight,
-                            tl.x,
-                            tl.y,
-                            drawW,
-                            drawH
-                        );
-                    }
+                // Prefer atlas draw (single GPU texture) when slot is available
+                if (entry.atlasRect && atlasCanvas) {
+                    const r = entry.atlasRect;
+                    ctx.drawImage(atlasCanvas, r.x, r.y, r.w, r.h, tl.x, tl.y, drawW, drawH);
+                } else if (entry.img) {
+                    drawLogoWithFit(
+                        ctx,
+                        entry.img,
+                        block.fitMode,
+                        block.imageWidth,
+                        block.imageHeight,
+                        tl.x,
+                        tl.y,
+                        drawW,
+                        drawH
+                    );
                 }
             });
 
@@ -496,7 +471,7 @@ export default function PixelBoard() {
             ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 1;
             ctx.strokeRect(boardTopLeft.x, boardTopLeft.y, boardBottomRight.x - boardTopLeft.x, boardBottomRight.y - boardTopLeft.y);
-    }, [precomputedBlocks, canvasSize, boardToScreen, drawLogoWithFit, resolveLogoUrl, setImageCacheEntry]);
+    }, [precomputedBlocks, canvasSize, boardToScreen, drawLogoWithFit, resolveLogoUrl]);
 
     // --- Draw overlay (hover, selection, drag preview) ---
     const drawOverlayBoard = useCallback(() => {
@@ -622,6 +597,26 @@ export default function PixelBoard() {
     useEffect(() => {
         requestRedrawRef.current = scheduleRedraw;
     }, [scheduleRedraw]);
+
+    // Wire the ImageCache module's redraw callback to our scheduler
+    useEffect(() => {
+        ImageCache.setRedrawCallback(scheduleRedraw);
+        return () => ImageCache.setRedrawCallback(null);
+    }, [scheduleRedraw]);
+
+    // Preload visible logos whenever pixel data or camera changes
+    useEffect(() => {
+        if (!precomputedBlocks || precomputedBlocks.length === 0) return;
+        const urls = [];
+        for (let i = 0; i < precomputedBlocks.length; i++) {
+            const block = precomputedBlocks[i];
+            const logo = block.ownerLogo || block.logoUrl;
+            if (!logo) continue;
+            const resolved = resolveLogoUrl(logo);
+            if (resolved) urls.push(resolved);
+        }
+        if (urls.length > 0) ImageCache.preloadBatch(urls);
+    }, [precomputedBlocks, resolveLogoUrl]);
 
     // Re-render on data or interactive overlay changes
     useEffect(() => {
@@ -753,7 +748,7 @@ export default function PixelBoard() {
         };
     }, []);
 
-    // --- Wheel zoom ---
+    // --- Wheel zoom (with trackpad pinch-to-zoom support) ---
     useEffect(() => {
         const canvas = overlayCanvasRef.current;
         if (!canvas) return;
@@ -764,13 +759,41 @@ export default function PixelBoard() {
             const sx = e.clientX - rect.left;
             const sy = e.clientY - rect.top;
 
-            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-            const newZ = camera.current.zoom * zoomFactor;
-            zoomToward(newZ, sx, sy);
+            // ctrlKey is set by browsers when a trackpad pinch gesture is translated to wheel
+            if (e.ctrlKey) {
+                // Trackpad pinch — deltaY is the zoom delta
+                const zoomDelta = -e.deltaY * 0.01;
+                const newZ = camera.current.zoom * (1 + zoomDelta);
+                zoomToward(newZ, sx, sy);
+            } else {
+                // Normal scroll wheel or two-finger trackpad scroll → zoom
+                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+                const newZ = camera.current.zoom * zoomFactor;
+                zoomToward(newZ, sx, sy);
+            }
         };
 
         canvas.addEventListener('wheel', handleWheel, { passive: false });
-        return () => canvas.removeEventListener('wheel', handleWheel);
+
+        // Safari gesture events for trackpad pinch (Safari doesn't set ctrlKey on wheel)
+        const handleGestureStart = (e) => e.preventDefault();
+        const handleGestureChange = (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            const newZ = camera.current.zoom * e.scale;
+            zoomToward(newZ, sx, sy);
+        };
+
+        canvas.addEventListener('gesturestart', handleGestureStart, { passive: false });
+        canvas.addEventListener('gesturechange', handleGestureChange, { passive: false });
+
+        return () => {
+            canvas.removeEventListener('wheel', handleWheel);
+            canvas.removeEventListener('gesturestart', handleGestureStart);
+            canvas.removeEventListener('gesturechange', handleGestureChange);
+        };
     }, [zoomToward]);
 
     // --- Keyboard shortcuts (Space pan, F fit, Arrow nudge) ---
@@ -1022,43 +1045,243 @@ export default function PixelBoard() {
         }
     }, []);
 
-    // Attach pointer events
+    // ── Mobile gesture helpers ────────────────────────────────────────────
+    const touchDist = useCallback((t1, t2) => {
+        const dx = t1.clientX - t2.clientX;
+        const dy = t1.clientY - t2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }, []);
+
+    const touchMid = useCallback((t1, t2) => ({
+        clientX: (t1.clientX + t2.clientX) / 2,
+        clientY: (t1.clientY + t2.clientY) / 2,
+    }), []);
+
+    const resetTouchState = useCallback(() => {
+        const ts = touchState.current;
+        if (ts.waitTimer) { clearTimeout(ts.waitTimer); ts.waitTimer = null; }
+        ts.type = 'none';
+        ts.startTouches = null;
+        ts.startCamera = null;
+        ts.startDist = 0;
+        ts.startZoom = 0;
+        ts.startMidBoard = null;
+    }, []);
+
+    // ── Touch event handlers (mobile gestures) ─────────────────────────
+    const handleTouchStart = useCallback((e) => {
+        e.preventDefault();
+        const ts = touchState.current;
+        const touches = e.touches;
+
+        if (touches.length === 2) {
+            // Immediately switch to pinch mode — cancel any pending wait/select
+            if (ts.waitTimer) { clearTimeout(ts.waitTimer); ts.waitTimer = null; }
+            // If we were in the middle of a drag-select, cancel it
+            if (isDraggingRef.current) {
+                setIsDragging(false);
+                isDraggingRef.current = false;
+                setDragStart(null);
+                setDragEnd(null);
+                currentDragStart.current = null;
+                currentDragEnd.current = null;
+            }
+
+            const d = touchDist(touches[0], touches[1]);
+            const mid = touchMid(touches[0], touches[1]);
+            const rect = overlayCanvasRef.current.getBoundingClientRect();
+            const sx = mid.clientX - rect.left;
+            const sy = mid.clientY - rect.top;
+            const c = camera.current;
+
+            ts.type = 'pinch';
+            ts.startDist = d;
+            ts.startZoom = c.zoom;
+            ts.startCamera = { x: c.x, y: c.y };
+            ts.startMidBoard = { boardX: sx / c.zoom + c.x, boardY: sy / c.zoom + c.y, sx, sy };
+            ts.startTouches = [
+                { clientX: touches[0].clientX, clientY: touches[0].clientY },
+                { clientX: touches[1].clientX, clientY: touches[1].clientY },
+            ];
+            return;
+        }
+
+        if (touches.length === 1 && ts.type === 'none') {
+            // Single finger — wait briefly to see if a second finger arrives (pinch)
+            const touch = touches[0];
+            ts.type = 'waiting';
+            ts.startTouches = [{ clientX: touch.clientX, clientY: touch.clientY }];
+            ts.startCamera = { x: camera.current.x, y: camera.current.y };
+
+            ts.waitTimer = setTimeout(() => {
+                // Timer expired with one finger still down → treat as select
+                ts.waitTimer = null;
+                if (ts.type !== 'waiting') return;
+                ts.type = 'select';
+                // Synthesize a pointerdown for the selection system
+                const fakeEvent = {
+                    clientX: ts.startTouches[0].clientX,
+                    clientY: ts.startTouches[0].clientY,
+                    button: 0,
+                    pointerId: undefined,
+                    preventDefault: () => {},
+                    currentTarget: overlayCanvasRef.current,
+                };
+                handleMouseDown(fakeEvent);
+            }, 80);
+        }
+    }, [touchDist, touchMid, resetTouchState, handleMouseDown]);
+
+    const handleTouchMove = useCallback((e) => {
+        e.preventDefault();
+        const ts = touchState.current;
+        const touches = e.touches;
+
+        if (ts.type === 'pinch' && touches.length >= 2) {
+            const d = touchDist(touches[0], touches[1]);
+            const mid = touchMid(touches[0], touches[1]);
+            const rect = overlayCanvasRef.current.getBoundingClientRect();
+            const sx = mid.clientX - rect.left;
+            const sy = mid.clientY - rect.top;
+
+            // Compute new zoom
+            const scale = d / ts.startDist;
+            const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, ts.startZoom * scale));
+
+            // Pan: keep the board point under the initial midpoint stationary
+            const mp = ts.startMidBoard;
+            const c = camera.current;
+            c.zoom = newZoom;
+            c.x = mp.boardX - sx / newZoom;
+            c.y = mp.boardY - sy / newZoom;
+            targetZoom.current = newZoom;
+
+            clampCamera();
+            setZoomDisplay(newZoom);
+            scheduleRedraw();
+            return;
+        }
+
+        if (ts.type === 'waiting' && touches.length === 1) {
+            // Check if finger moved enough to reclassify as pan
+            const dx = touches[0].clientX - ts.startTouches[0].clientX;
+            const dy = touches[0].clientY - ts.startTouches[0].clientY;
+            if (Math.abs(dx) + Math.abs(dy) > 8) {
+                // Promote to pan immediately
+                if (ts.waitTimer) { clearTimeout(ts.waitTimer); ts.waitTimer = null; }
+                ts.type = 'pan';
+                ts.startTouches = [{ clientX: touches[0].clientX, clientY: touches[0].clientY }];
+                ts.startCamera = { x: camera.current.x, y: camera.current.y };
+            }
+            return;
+        }
+
+        if (ts.type === 'pan' && touches.length === 1) {
+            const dx = touches[0].clientX - ts.startTouches[0].clientX;
+            const dy = touches[0].clientY - ts.startTouches[0].clientY;
+            const c = camera.current;
+            c.x = ts.startCamera.x - dx / c.zoom;
+            c.y = ts.startCamera.y - dy / c.zoom;
+            clampCamera();
+            scheduleRedraw();
+            return;
+        }
+
+        if (ts.type === 'select' && touches.length === 1) {
+            // Forward to drag/hover handler
+            const fakeEvent = {
+                clientX: touches[0].clientX,
+                clientY: touches[0].clientY,
+                button: 0,
+                pointerId: undefined,
+                preventDefault: () => {},
+                currentTarget: overlayCanvasRef.current,
+            };
+            handleMouseMove(fakeEvent);
+        }
+    }, [touchDist, touchMid, clampCamera, scheduleRedraw, handleMouseMove]);
+
+    const handleTouchEnd = useCallback((e) => {
+        e.preventDefault();
+        const ts = touchState.current;
+
+        if (ts.type === 'pinch' && e.touches.length < 2) {
+            // Pinch ended — if one finger remains, switch to pan
+            if (e.touches.length === 1) {
+                ts.type = 'pan';
+                ts.startTouches = [{ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY }];
+                ts.startCamera = { x: camera.current.x, y: camera.current.y };
+            } else {
+                resetTouchState();
+            }
+            return;
+        }
+
+        if (ts.type === 'waiting') {
+            // Finger released quickly without moving → tap → select pixel
+            if (ts.waitTimer) { clearTimeout(ts.waitTimer); ts.waitTimer = null; }
+            const t = ts.startTouches[0];
+            const fakeDown = {
+                clientX: t.clientX,
+                clientY: t.clientY,
+                button: 0,
+                pointerId: undefined,
+                preventDefault: () => {},
+                currentTarget: overlayCanvasRef.current,
+            };
+            handleMouseDown(fakeDown);
+            // Immediately follow with mouseUp so it registers as a tap/click
+            setTimeout(() => {
+                const fakeUp = {
+                    clientX: t.clientX,
+                    clientY: t.clientY,
+                    button: 0,
+                    pointerId: undefined,
+                    preventDefault: () => {},
+                    currentTarget: overlayCanvasRef.current,
+                };
+                handleMouseUp(fakeUp);
+            }, 0);
+            resetTouchState();
+            return;
+        }
+
+        if (ts.type === 'select') {
+            // Forward end to mouseUp
+            const touch = e.changedTouches[0];
+            if (touch) {
+                const fakeEvent = {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                    button: 0,
+                    pointerId: undefined,
+                    preventDefault: () => {},
+                    currentTarget: overlayCanvasRef.current,
+                };
+                handleMouseUp(fakeEvent);
+            }
+            resetTouchState();
+            return;
+        }
+
+        if (e.touches.length === 0) {
+            resetTouchState();
+        }
+    }, [handleMouseDown, handleMouseUp, resetTouchState]);
+
+    // ── Attach unified pointer/mouse/touch events ──────────────────────
     useEffect(() => {
         const canvas = overlayCanvasRef.current;
         if (!canvas) return;
         const supportsPointerEvents = typeof window !== 'undefined' && 'PointerEvent' in window;
 
-        const toMouseLikeEvent = (touchEvent) => {
-            const touch = touchEvent.touches[0] || touchEvent.changedTouches[0];
-            if (!touch) return null;
-            return {
-                clientX: touch.clientX,
-                clientY: touch.clientY,
-                button: 0,
-                pointerId: undefined,
-                preventDefault: () => touchEvent.preventDefault(),
-                currentTarget: touchEvent.currentTarget,
-            };
-        };
-
-        const handleTouchStart = (e) => {
-            const evt = toMouseLikeEvent(e);
-            if (evt) handleMouseDown(evt);
-        };
-        const handleTouchMove = (e) => {
-            const evt = toMouseLikeEvent(e);
-            if (evt) handleMouseMove(evt);
-        };
-        const handleTouchEnd = (e) => {
-            const evt = toMouseLikeEvent(e);
-            if (evt) handleMouseUp(evt);
-        };
-
+        // Touch events — dedicated gesture handling (mobile)
         canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
         canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
         canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
         canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
 
+        // Pointer events — for mouse / stylus / single-pointer desktop (primary)
         if (supportsPointerEvents) {
             canvas.addEventListener('pointerdown', handleMouseDown, { passive: false });
             canvas.addEventListener('pointermove', handleMouseMove, { passive: false });
@@ -1066,6 +1289,7 @@ export default function PixelBoard() {
             window.addEventListener('pointerup', handleMouseUp);
             window.addEventListener('pointercancel', handleMouseUp);
         } else {
+            // Fallback: plain mouse events
             canvas.addEventListener('mousedown', handleMouseDown, { passive: false });
             window.addEventListener('mousemove', handleMouseMove, { passive: false });
             window.addEventListener('mouseup', handleMouseUp);
@@ -1091,7 +1315,7 @@ export default function PixelBoard() {
             }
             canvas.removeEventListener('pointerleave', handleMouseLeave);
         };
-    }, [handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave]);
+    }, [handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave, handleTouchStart, handleTouchMove, handleTouchEnd]);
 
     const handleCheckoutClick = () => {
         if (!user) { setAuthModalOpen(true); return; }
