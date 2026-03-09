@@ -367,11 +367,21 @@ export default function PixelBoard() {
                 };
             });
 
-            // 2. Draw block backgrounds
-            visibleDrawBlocks.forEach(({ block, tl, br }) => {
-                ctx.fillStyle = block.color || '#000000';
-                ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+            // 2. Draw block backgrounds (batched by color to minimize fillStyle changes)
+            const colorGroups = new Map();
+            visibleDrawBlocks.forEach((vdb) => {
+                const c = vdb.block.color || '#000000';
+                let arr = colorGroups.get(c);
+                if (!arr) { arr = []; colorGroups.set(c, arr); }
+                arr.push(vdb);
             });
+            for (const [color, blocks] of colorGroups) {
+                ctx.fillStyle = color;
+                for (let i = 0; i < blocks.length; i++) {
+                    const { tl, br } = blocks[i];
+                    ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+                }
+            }
 
             // 3. Dynamic multi-level grid
             const bTop = Math.max(0, boardTopLeft.y);
@@ -787,17 +797,19 @@ export default function PixelBoard() {
             const sx = e.clientX - rect.left;
             const sy = e.clientY - rect.top;
 
-            // ctrlKey is set by browsers when a trackpad pinch gesture is translated to wheel
-            if (e.ctrlKey) {
-                // Trackpad pinch — deltaY is the zoom delta
+            if (e.ctrlKey || e.metaKey) {
+                // Trackpad pinch or Ctrl+scroll → ZOOM
                 const zoomDelta = -e.deltaY * 0.01;
                 const newZ = camera.current.zoom * (1 + zoomDelta);
                 zoomToward(newZ, sx, sy);
             } else {
-                // Normal scroll wheel or two-finger trackpad scroll → zoom
-                const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-                const newZ = camera.current.zoom * zoomFactor;
-                zoomToward(newZ, sx, sy);
+                // Two-finger trackpad scroll or mouse wheel → PAN
+                // deltaX → horizontal pan, deltaY → vertical pan
+                const c = camera.current;
+                c.x += e.deltaX / c.zoom;
+                c.y += e.deltaY / c.zoom;
+                clampCamera();
+                scheduleRedraw();
             }
         };
 
@@ -822,7 +834,7 @@ export default function PixelBoard() {
             canvas.removeEventListener('gesturestart', handleGestureStart);
             canvas.removeEventListener('gesturechange', handleGestureChange);
         };
-    }, [zoomToward]);
+    }, [zoomToward, clampCamera, scheduleRedraw]);
 
     // --- Keyboard shortcuts (Space pan, F fit, Arrow nudge) ---
     useEffect(() => {

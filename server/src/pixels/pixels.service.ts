@@ -101,6 +101,7 @@ export class PixelsService {
                     Key: `logos/${filename}`,
                     Body: file.buffer,
                     ContentType: contentType,
+                    CacheControl: 'public, max-age=31536000, immutable',
                 }));
                 finalLogoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
             } else {

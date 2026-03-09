@@ -39,10 +39,13 @@ export function setRedrawCallback(fn) {
 const ATLAS_SIZE = 2048; // px, power-of-two for GPU friendliness
 const ATLAS_CELL = 128;  // each logo gets a 128×128 slot
 const ATLAS_COLS = ATLAS_SIZE / ATLAS_CELL; // 16
+const ATLAS_MAX_SLOTS = ATLAS_COLS * ATLAS_COLS; // 256
 
 let atlas = null;        // OffscreenCanvas | HTMLCanvasElement
 let atlasCtx = null;
 let atlasNextSlot = 0;
+/** Track which URL occupies each atlas slot, enabling overwrite on wrap-around */
+const atlasSlotOwner = new Array(ATLAS_MAX_SLOTS).fill(null);
 
 function ensureAtlas() {
   if (atlas) return;
@@ -58,12 +61,25 @@ function ensureAtlas() {
 
 /**
  * Pack an image into the atlas and return its rect.
- * Returns null if atlas is full.
+ * When atlas is full, wraps around and overwrites the oldest slot.
  */
-function packIntoAtlas(img) {
+function packIntoAtlas(img, url) {
   ensureAtlas();
-  const maxSlots = ATLAS_COLS * ATLAS_COLS; // 256
-  if (atlasNextSlot >= maxSlots) return null;
+
+  // When full, wrap around and invalidate the previous occupant's atlasRect
+  if (atlasNextSlot >= ATLAS_MAX_SLOTS) {
+    atlasNextSlot = 0;
+  }
+
+  const slotIndex = atlasNextSlot;
+  const prevOwnerUrl = atlasSlotOwner[slotIndex];
+  if (prevOwnerUrl) {
+    const prevEntry = cache.get(prevOwnerUrl);
+    if (prevEntry && prevEntry.atlasRect) {
+      prevEntry.atlasRect = null; // force fallback to img direct draw
+    }
+  }
+  atlasSlotOwner[slotIndex] = url || null;
 
   const col = atlasNextSlot % ATLAS_COLS;
   const row = Math.floor(atlasNextSlot / ATLAS_COLS);
@@ -132,7 +148,7 @@ function fetchImage(url, retryCount) {
 
     // Try async decode before atlas packing (prevents jank)
     const finalize = () => {
-      const rect = packIntoAtlas(img);
+      const rect = packIntoAtlas(img, url);
       const readyEntry = {
         status: 'ready',
         img,
@@ -212,4 +228,5 @@ export function clearAll() {
   cache.clear();
   if (atlasCtx) atlasCtx.clearRect(0, 0, ATLAS_SIZE, ATLAS_SIZE);
   atlasNextSlot = 0;
+  atlasSlotOwner.fill(null);
 }

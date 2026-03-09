@@ -8,6 +8,8 @@ export const usePixels = () => {
         queryKey: ['pixels'],
         queryFn: getPixels,
         initialData: [],
+        staleTime: 30_000,
+        refetchOnWindowFocus: false,
     });
 
     const purchaseMutation = useMutation({
