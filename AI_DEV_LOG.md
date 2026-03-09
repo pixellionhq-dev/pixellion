@@ -165,3 +165,21 @@ DESCRIPTION OF CHANGE
 Diagnosed that all 5 logo URLs in production return HTTP 404 because Render ephemeral filesystem wipes the uploads directory on redeploy. Added automatic retry with exponential backoff (2s, 6s, 15s, up to 3 retries) to imageCache.js for failed/timed-out images so logos recover transparently when server restarts. Added img.decode() before atlas packing to prevent main-thread jank. Updated PixelBoard draw loop to show branded placeholder (white overlay with brand initial letter and subtle loading spinner) while images are loading or errored, instead of showing nothing. Added preconnect and dns-prefetch hints for the API domain in index.html to reduce connection latency for image loads.
 REASON
 All logo images return 404 on Render because uploaded files are lost on redeploy (ephemeral disk). Frontend needs to be resilient to temporary image unavailability, retry automatically, and show meaningful placeholders. Preconnect eliminates DNS+TLS handshake latency for first image request.
+
+---
+
+2026-03-09
+AI TOOL USED
+GitHub Copilot (Claude Opus 4.6)
+FILES MODIFIED
+server/src/pixels/pixels.service.ts
+server/package.json (added @aws-sdk/client-s3)
+AI_DEV_LOG.md
+DESCRIPTION OF CHANGE
+Integrated Cloudflare R2 as persistent image storage for logo uploads.
+Installed @aws-sdk/client-s3 in server.
+Modified pixels.service.ts to upload logos to R2 when env vars are set (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL), with graceful fallback to local disk if not configured.
+Logos are stored under logos/ prefix in R2 bucket.
+Stored URL in database uses R2 public URL so images load directly from Cloudflare CDN.
+REASON
+Render ephemeral filesystem deletes all uploaded logo files on every redeploy, causing permanent 404s. R2 provides persistent, CDN-backed storage that survives deploys and loads globally in milliseconds.

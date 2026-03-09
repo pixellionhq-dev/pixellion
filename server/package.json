@@ -12,6 +12,7 @@
     "db:setup": "npm run prisma:migrate && npm run prisma:seed"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1004.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/jwt": "^11.0.0",

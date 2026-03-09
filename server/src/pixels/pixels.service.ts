@@ -4,8 +4,32 @@ import { Prisma } from '@prisma/client';
 import { writeFile } from 'fs/promises';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const PIXEL_PRICE = parseFloat(process.env.PIXEL_PRICE || '100');
+
+// Cloudflare R2 configuration (S3-compatible)
+// Required env vars on Render: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL
+function createR2Client(): S3Client | null {
+    const accountId = process.env.R2_ACCOUNT_ID;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const bucket = process.env.R2_BUCKET_NAME;
+
+    if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
+        return null;
+    }
+
+    return new S3Client({
+        region: 'auto',
+        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+        credentials: { accessKeyId, secretAccessKey },
+    });
+}
+
+const r2Client = createR2Client();
+const R2_BUCKET = process.env.R2_BUCKET_NAME || '';
+const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || '').replace(/\/+$/, '');
 
 @Injectable()
 export class PixelsService {
@@ -69,8 +93,22 @@ export class PixelsService {
         if (file) {
             const ext = extname(file.originalname);
             const filename = `${uuidv4()}${ext}`;
-            await writeFile(`./uploads/${filename}`, file.buffer);
-            finalLogoUrl = `${process.env.API_URL || 'https://pixellion-ilos.onrender.com'}/uploads/${filename}`;
+
+            if (r2Client && R2_BUCKET && R2_PUBLIC_URL) {
+                // Upload to Cloudflare R2 (persistent, CDN-backed)
+                const contentType = file.mimetype || 'application/octet-stream';
+                await r2Client.send(new PutObjectCommand({
+                    Bucket: R2_BUCKET,
+                    Key: `logos/${filename}`,
+                    Body: file.buffer,
+                    ContentType: contentType,
+                }));
+                finalLogoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
+            } else {
+                // Fallback: local disk (will be lost on Render redeploy)
+                await writeFile(`./uploads/${filename}`, file.buffer);
+                finalLogoUrl = `${process.env.API_URL || 'https://pixellion-ilos.onrender.com'}/uploads/${filename}`;
+            }
         }
 
         // Find buyer for this user
