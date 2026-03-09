@@ -102,3 +102,14 @@ DESCRIPTION OF CHANGE
 Fixed cross-browser drag robustness by hardening canvas input handling with pointer safeguards, global pointer move/up capture support, mouse fallback for non-pointer environments, and touchstart/touchmove/touchend/touchcancel fallback routing for Safari/mobile Safari. Updated mouse leave behavior to avoid prematurely ending active drags. Fixed logo loading path by improving resolveLogoUrl to preserve blob/data URLs and normalize absolute localhost/127.0.0.1 URLs to the configured API base URL while retaining non-local absolute URLs.
 REASON
 Ensure stable drag/pan behavior across Safari/Chrome/Firefox/mobile Safari and restore reliable board logo loading in production without changing architecture or backend API shapes.
+
+2026-03-09
+AI TOOL USED
+Copilot (GPT-5.3-Codex)
+FILES MODIFIED
+src/components/PixelBoard.jsx
+AI_DEV_LOG.md
+DESCRIPTION OF CHANGE
+Improved logo loading speed and reliability on PixelBoard by normalizing logo URLs with API base plus optional R2/CDN public base support, rewriting localhost absolute URLs to production-safe endpoints, and preserving blob/data URLs. Updated image cache behavior to deduplicate by normalized URL, add async decode hints, enforce loading timeout fail-safe to avoid stuck loading state, mark errors explicitly, trigger redraw on load/error, and keep cache lightweight with bounded size eviction.
+REASON
+Ensure production-safe logo resolution and faster repeated canvas renders while preventing duplicate loads and non-terminating loading states.

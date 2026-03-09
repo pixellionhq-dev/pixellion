@@ -141,6 +141,8 @@ export default function PixelBoard() {
     }, [ownedPixels]);
 
     const imageCache = useRef(new Map());
+    const IMAGE_CACHE_MAX = 1200;
+    const IMAGE_LOADING_TIMEOUT_MS = 15000;
     const redrawFrame = useRef(null);
     const requestRedrawRef = useRef(() => { });
     const hoveredKeyRef = useRef('');
@@ -148,30 +150,59 @@ export default function PixelBoard() {
     const lastTooltipPosRef = useRef({ x: 0, y: 0 });
     const lastNearMinimapRef = useRef(false);
 
+    const setImageCacheEntry = useCallback((key, entry) => {
+        const cache = imageCache.current;
+        cache.set(key, entry);
+
+        // Lightweight cap to keep memory bounded over long sessions.
+        if (cache.size <= IMAGE_CACHE_MAX) return;
+        for (const [k, v] of cache) {
+            if (k === key) continue;
+            if (v?.status === 'loading') continue;
+            cache.delete(k);
+            break;
+        }
+    }, []);
+
     const resolveLogoUrl = useCallback((logoPath) => {
         if (!logoPath) return '';
         if (/^(blob:|data:)/i.test(logoPath)) return logoPath;
 
         const baseURL = apiClient.defaults.baseURL || window.location.origin;
+        const r2PublicBase =
+            import.meta.env.VITE_R2_PUBLIC_BASE_URL
+            || import.meta.env.VITE_R2_PUBLIC_URL
+            || import.meta.env.VITE_LOGO_CDN_BASE_URL
+            || '';
 
-        if (/^https?:\/\//i.test(logoPath)) {
+        const normalizedR2Base = r2PublicBase ? r2PublicBase.replace(/\/+$/, '') : '';
+        const normalizedPathInput = String(logoPath).trim();
+
+        if (/^https?:\/\//i.test(normalizedPathInput)) {
             try {
-                const incoming = new URL(logoPath);
+                const incoming = new URL(normalizedPathInput);
                 const incomingHost = incoming.hostname.toLowerCase();
                 const isLocalHost = incomingHost === 'localhost' || incomingHost === '127.0.0.1' || incomingHost === '::1';
 
-                if (!isLocalHost) return logoPath;
+                if (!isLocalHost) return normalizedPathInput;
 
                 const apiBase = new URL(baseURL);
                 return new URL(`${incoming.pathname}${incoming.search}${incoming.hash}`, apiBase).toString();
             } catch {
-                return logoPath;
+                return normalizedPathInput;
             }
         }
 
-        const normalizedPath = logoPath.startsWith('/uploads/')
-            ? logoPath
-            : `/uploads/${logoPath.split('/').pop()}`;
+        if (normalizedR2Base && !normalizedPathInput.startsWith('/uploads/') && !normalizedPathInput.startsWith('uploads/')) {
+            const cleanedPath = normalizedPathInput.replace(/^\/+/, '');
+            return `${normalizedR2Base}/${cleanedPath}`;
+        }
+
+        const normalizedPath = normalizedPathInput.startsWith('/uploads/')
+            ? normalizedPathInput
+            : normalizedPathInput.startsWith('uploads/')
+                ? `/${normalizedPathInput}`
+                : `/uploads/${normalizedPathInput.split('/').pop()}`;
 
         return new URL(normalizedPath, baseURL).toString();
     }, []);
@@ -391,24 +422,40 @@ export default function PixelBoard() {
             visibleDrawBlocks.forEach(({ block, tl, br, drawW, drawH }) => {
                 const logoToUse = block.ownerLogo || block.logoUrl;
                 if (!logoToUse) return;
+                const resolvedLogoUrl = resolveLogoUrl(logoToUse);
+                if (!resolvedLogoUrl) return;
 
                 // Skip if too small to see
                 if (drawW < 2 || drawH < 2) return;
 
-                if (!imageCache.current.has(logoToUse)) {
-                    imageCache.current.set(logoToUse, { status: 'loading' });
+                if (!imageCache.current.has(resolvedLogoUrl)) {
+                    const loadStartedAt = Date.now();
+                    setImageCacheEntry(resolvedLogoUrl, { status: 'loading', startedAt: loadStartedAt });
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
+                    img.decoding = 'async';
+
+                    const timeoutId = window.setTimeout(() => {
+                        const entry = imageCache.current.get(resolvedLogoUrl);
+                        if (entry?.status === 'loading' && entry.startedAt === loadStartedAt) {
+                            setImageCacheEntry(resolvedLogoUrl, { status: 'error', failedAt: Date.now() });
+                            requestRedrawRef.current();
+                        }
+                    }, IMAGE_LOADING_TIMEOUT_MS);
+
                     img.onload = () => {
-                        imageCache.current.set(logoToUse, { status: 'ready', img });
+                        window.clearTimeout(timeoutId);
+                        setImageCacheEntry(resolvedLogoUrl, { status: 'ready', img, loadedAt: Date.now() });
                         requestRedrawRef.current();
                     };
                     img.onerror = () => {
-                        imageCache.current.set(logoToUse, { status: 'error' });
+                        window.clearTimeout(timeoutId);
+                        setImageCacheEntry(resolvedLogoUrl, { status: 'error', failedAt: Date.now() });
+                        requestRedrawRef.current();
                     };
-                    img.src = resolveLogoUrl(logoToUse);
+                    img.src = resolvedLogoUrl;
                 } else {
-                    const cached = imageCache.current.get(logoToUse);
+                    const cached = imageCache.current.get(resolvedLogoUrl);
                     if (cached?.status === 'ready' && cached.img) {
                         ctx.fillStyle = '#FFFFFF';
                         ctx.fillRect(tl.x, tl.y, drawW, drawH);
@@ -449,7 +496,7 @@ export default function PixelBoard() {
             ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 1;
             ctx.strokeRect(boardTopLeft.x, boardTopLeft.y, boardBottomRight.x - boardTopLeft.x, boardBottomRight.y - boardTopLeft.y);
-    }, [precomputedBlocks, canvasSize, boardToScreen, drawLogoWithFit, resolveLogoUrl]);
+    }, [precomputedBlocks, canvasSize, boardToScreen, drawLogoWithFit, resolveLogoUrl, setImageCacheEntry]);
 
     // --- Draw overlay (hover, selection, drag preview) ---
     const drawOverlayBoard = useCallback(() => {
