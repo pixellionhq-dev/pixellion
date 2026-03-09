@@ -4,7 +4,8 @@
  * Features:
  * - Bounded LRU-ish cache (evicts oldest non-loading entries when full)
  * - Deduplicates in-flight loads (same URL → single fetch)
- * - Async image decoding via createImageBitmap / img.decode()
+ * - Automatic retry with exponential backoff for failed loads
+ * - Async image decoding via img.decode() where supported
  * - Batch preload API for visible logos
  * - Simple texture atlas: packs loaded images into a single OffscreenCanvas
  *   so the main draw loop can issue drawImage from one GPU-backed source.
@@ -12,7 +13,9 @@
  */
 
 const IMAGE_CACHE_MAX = 1200;
-const LOADING_TIMEOUT_MS = 15_000;
+const LOADING_TIMEOUT_MS = 12_000;
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [2_000, 6_000, 15_000]; // exponential-ish backoff
 
 // ── Singleton state ──────────────────────────────────────────────────────────
 
@@ -21,7 +24,7 @@ const cache = new Map();
 
 /**
  * @typedef {'loading'|'ready'|'error'} CacheStatus
- * @typedef {{ status: CacheStatus, img?: HTMLImageElement|ImageBitmap, startedAt?: number, failedAt?: number, loadedAt?: number, atlasRect?: {x:number,y:number,w:number,h:number} }} CacheEntry
+ * @typedef {{ status: CacheStatus, img?: HTMLImageElement|ImageBitmap, startedAt?: number, failedAt?: number, loadedAt?: number, atlasRect?: {x:number,y:number,w:number,h:number}, retries?: number }} CacheEntry
  */
 
 let _onRedraw = () => {};
@@ -101,21 +104,11 @@ export function cacheSize() {
 }
 
 /**
- * Request an image by resolved URL.
- * - If already cached → returns the existing entry immediately.
- * - If not cached → starts loading, returns the new 'loading' entry.
- * Deduplication: calling load() twice with the same url while the first is
- * still in-flight will NOT start a second fetch.
+ * Internal: start a single image fetch with timeout.
  */
-export function load(url) {
-  if (!url) return null;
-
-  const existing = cache.get(url);
-  if (existing) return existing;
-
-  // Start a new load
+function fetchImage(url, retryCount) {
   const loadStartedAt = Date.now();
-  const entry = { status: 'loading', startedAt: loadStartedAt };
+  const entry = { status: 'loading', startedAt: loadStartedAt, retries: retryCount };
   cache.set(url, entry);
   if (cache.size > IMAGE_CACHE_MAX) evictOne(url);
 
@@ -126,38 +119,78 @@ export function load(url) {
   const timeoutId = setTimeout(() => {
     const e = cache.get(url);
     if (e && e.status === 'loading' && e.startedAt === loadStartedAt) {
-      cache.set(url, { status: 'error', failedAt: Date.now() });
-      _onRedraw();
+      scheduleRetryOrFail(url, retryCount);
     }
   }, LOADING_TIMEOUT_MS);
 
   const onDone = (ok) => {
     clearTimeout(timeoutId);
     if (!ok) {
-      cache.set(url, { status: 'error', failedAt: Date.now() });
-      _onRedraw();
+      scheduleRetryOrFail(url, retryCount);
       return;
     }
 
-    // Try to pack into atlas
-    const rect = packIntoAtlas(img);
-
-    const readyEntry = {
-      status: 'ready',
-      img,
-      loadedAt: Date.now(),
-      atlasRect: rect, // null if atlas full; caller falls back to img directly
+    // Try async decode before atlas packing (prevents jank)
+    const finalize = () => {
+      const rect = packIntoAtlas(img);
+      const readyEntry = {
+        status: 'ready',
+        img,
+        loadedAt: Date.now(),
+        atlasRect: rect,
+        retries: retryCount,
+      };
+      cache.set(url, readyEntry);
+      if (cache.size > IMAGE_CACHE_MAX) evictOne(url);
+      _onRedraw();
     };
-    cache.set(url, readyEntry);
-    if (cache.size > IMAGE_CACHE_MAX) evictOne(url);
-    _onRedraw();
+
+    if (typeof img.decode === 'function') {
+      img.decode().then(finalize).catch(finalize); // still usable even if decode fails
+    } else {
+      finalize();
+    }
   };
 
   img.onload = () => onDone(true);
   img.onerror = () => onDone(false);
   img.src = url;
+}
 
-  return entry;
+function scheduleRetryOrFail(url, prevRetryCount) {
+  const nextRetry = prevRetryCount + 1;
+  if (nextRetry > MAX_RETRIES) {
+    cache.set(url, { status: 'error', failedAt: Date.now(), retries: prevRetryCount });
+    _onRedraw();
+    return;
+  }
+  const delay = RETRY_DELAYS[Math.min(nextRetry - 1, RETRY_DELAYS.length - 1)];
+  cache.set(url, { status: 'loading', startedAt: Date.now(), retries: nextRetry }); // keep as loading during wait
+  setTimeout(() => {
+    // Only retry if entry is still ours (hasn't been cleared)
+    const e = cache.get(url);
+    if (e && e.status === 'loading' && e.retries === nextRetry) {
+      fetchImage(url, nextRetry);
+    }
+  }, delay);
+}
+
+/**
+ * Request an image by resolved URL.
+ * - If already cached → returns the existing entry immediately.
+ * - If not cached → starts loading, returns the new 'loading' entry.
+ * - If errored → auto-retries up to MAX_RETRIES with backoff.
+ * Deduplication: calling load() twice with the same url while the first is
+ * still in-flight will NOT start a second fetch.
+ */
+export function load(url) {
+  if (!url) return null;
+
+  const existing = cache.get(url);
+  if (existing) return existing;
+
+  fetchImage(url, 0);
+  return cache.get(url);
 }
 
 /**

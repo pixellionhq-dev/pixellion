@@ -425,27 +425,55 @@ export default function PixelBoard() {
                 if (drawW < 2 || drawH < 2) return;
 
                 const entry = ImageCache.load(resolvedLogoUrl);
-                if (!entry || entry.status !== 'ready') return;
 
-                ctx.fillStyle = '#FFFFFF';
-                ctx.fillRect(tl.x, tl.y, drawW, drawH);
+                if (entry && entry.status === 'ready') {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(tl.x, tl.y, drawW, drawH);
 
-                // Prefer atlas draw (single GPU texture) when slot is available
-                if (entry.atlasRect && atlasCanvas) {
-                    const r = entry.atlasRect;
-                    ctx.drawImage(atlasCanvas, r.x, r.y, r.w, r.h, tl.x, tl.y, drawW, drawH);
-                } else if (entry.img) {
-                    drawLogoWithFit(
-                        ctx,
-                        entry.img,
-                        block.fitMode,
-                        block.imageWidth,
-                        block.imageHeight,
-                        tl.x,
-                        tl.y,
-                        drawW,
-                        drawH
-                    );
+                    // Prefer atlas draw (single GPU texture) when slot is available
+                    if (entry.atlasRect && atlasCanvas) {
+                        const r = entry.atlasRect;
+                        ctx.drawImage(atlasCanvas, r.x, r.y, r.w, r.h, tl.x, tl.y, drawW, drawH);
+                    } else if (entry.img) {
+                        drawLogoWithFit(
+                            ctx,
+                            entry.img,
+                            block.fitMode,
+                            block.imageWidth,
+                            block.imageHeight,
+                            tl.x,
+                            tl.y,
+                            drawW,
+                            drawH
+                        );
+                    }
+                } else if (drawW > 20 && drawH > 12) {
+                    // Show loading/error placeholder with brand initial
+                    const isError = entry && entry.status === 'error';
+                    ctx.fillStyle = isError ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.7)';
+                    ctx.fillRect(tl.x, tl.y, drawW, drawH);
+
+                    // Draw brand initial letter
+                    const brandName = block.groupId ? String(block.groupId).charAt(0).toUpperCase() : '?';
+                    const fontSize = Math.max(8, Math.min(drawW * 0.4, drawH * 0.5, 32));
+                    ctx.fillStyle = isError ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.1)';
+                    ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(brandName, tl.x + drawW / 2, tl.y + drawH / 2);
+
+                    // Subtle loading spinner indicator (not error)
+                    if (!isError && drawW > 30) {
+                        const spinnerR = Math.min(6, drawW * 0.08);
+                        const cx = tl.x + drawW - spinnerR - 4;
+                        const cy = tl.y + spinnerR + 4;
+                        const angle = (performance.now() / 600) % (Math.PI * 2);
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, spinnerR, angle, angle + Math.PI * 1.4);
+                        ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    }
                 }
             });
 

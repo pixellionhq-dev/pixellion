@@ -150,4 +150,18 @@ Desktop behavior completely unchanged.
 
 REASON
 Logos loaded slowly due to per-frame fetching without preloading or atlas batching. Mobile users could not pan/zoom because touch events were forced through single-finger mouse shims. Platform inconsistency across Safari trackpad, desktop mouse, mobile touch, and tablet stylus required unified but separate input handling.
-Ensure production-safe logo resolution and faster repeated canvas renders while preventing duplicate loads and non-terminating loading states.
+
+---
+
+2026-03-09
+AI TOOL USED
+GitHub Copilot (Claude Opus 4.6)
+FILES MODIFIED
+src/utils/imageCache.js
+src/components/PixelBoard.jsx
+index.html
+AI_DEV_LOG.md
+DESCRIPTION OF CHANGE
+Diagnosed that all 5 logo URLs in production return HTTP 404 because Render ephemeral filesystem wipes the uploads directory on redeploy. Added automatic retry with exponential backoff (2s, 6s, 15s, up to 3 retries) to imageCache.js for failed/timed-out images so logos recover transparently when server restarts. Added img.decode() before atlas packing to prevent main-thread jank. Updated PixelBoard draw loop to show branded placeholder (white overlay with brand initial letter and subtle loading spinner) while images are loading or errored, instead of showing nothing. Added preconnect and dns-prefetch hints for the API domain in index.html to reduce connection latency for image loads.
+REASON
+All logo images return 404 on Render because uploaded files are lost on redeploy (ephemeral disk). Frontend needs to be resilient to temporary image unavailability, retry automatically, and show meaningful placeholders. Preconnect eliminates DNS+TLS handshake latency for first image request.
