@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 
 export default function BrandProfile() {
     const { brandName } = useParams();
@@ -11,7 +11,7 @@ export default function BrandProfile() {
     const { data: pixels = [], isLoading } = useQuery({
         queryKey: ['pixels'],
         queryFn: async () => {
-            const res = await axios.get('http://localhost:3001/api/pixels');
+            const res = await apiClient.get('/pixels');
             return res.data;
         }
     });

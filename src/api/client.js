@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export const apiClient = axios.create({
     baseURL: import.meta.env.VITE_API_URL || 'https://pixellion-ilos.onrender.com',
-    withCredentials: true,
+    withCredentials: false,
     timeout: 30_000,
 });
 
