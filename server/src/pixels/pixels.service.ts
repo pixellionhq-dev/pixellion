@@ -97,13 +97,18 @@ export class PixelsService {
             }
 
             const contentType = file.mimetype || 'application/octet-stream';
-            await r2Client.send(new PutObjectCommand({
-                Bucket: R2_BUCKET,
-                Key: `logos/${filename}`,
-                Body: file.buffer,
-                ContentType: contentType,
-                CacheControl: 'public, max-age=31536000, immutable',
-            }));
+            try {
+                await r2Client.send(new PutObjectCommand({
+                    Bucket: R2_BUCKET,
+                    Key: `logos/${filename}`,
+                    Body: file.buffer,
+                    ContentType: contentType,
+                    CacheControl: 'public, max-age=31536000, immutable',
+                }));
+            } catch (error) {
+                console.error("R2 Upload Failed:", error);
+                throw new InternalServerErrorException("Failed to upload logo to R2 storage.");
+            }
             finalLogoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
         }
 
