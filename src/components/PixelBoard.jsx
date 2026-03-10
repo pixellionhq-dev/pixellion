@@ -1390,10 +1390,6 @@ export default function PixelBoard() {
 
         queryClient.setQueryData(['pixels'], old => [...(old || []), ...optimisticPixels]);
 
-        setSelectedPixels(new Set());
-        setQuantityInput('');
-        setWidthInput('');
-        setHeightInput('');
         setIsProcessing(true);
 
         try {
@@ -1410,8 +1406,18 @@ export default function PixelBoard() {
                     setUploadProgress(percentCompleted);
                 }
             });
+
             setPurchaseModalOpen(false);
+            setSelectedPixels(new Set());
+            setQuantityInput('');
+            setWidthInput('');
+            setHeightInput('');
             setPurchaseKey(k => k + 1);
+            await queryClient.invalidateQueries({ queryKey: ['pixels'] });
+            await queryClient.invalidateQueries({ queryKey: ['stats'] });
+            await queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
+            await queryClient.invalidateQueries({ queryKey: ['buyers'] });
+            await queryClient.invalidateQueries({ queryKey: ['auth'] });
 
             // Trigger purchase highlight animation (Feature 11)
             if (coords.length > 0) {

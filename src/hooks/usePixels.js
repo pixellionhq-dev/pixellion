@@ -8,7 +8,7 @@ export const usePixels = () => {
         queryKey: ['pixels'],
         queryFn: getPixels,
         initialData: [],
-        staleTime: 30_000,
+        staleTime: 0,
         refetchOnWindowFocus: false,
     });
 

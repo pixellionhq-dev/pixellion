@@ -6,7 +6,7 @@ export const useLeaderboard = () => {
         queryKey: ['leaderboard'],
         queryFn: getLeaderboard,
         initialData: [],
-        staleTime: 60_000,
+        staleTime: 0,
     });
 };
 
@@ -15,7 +15,7 @@ export const useDirectory = (search, country) => {
         queryKey: ['buyers', search, country],
         queryFn: () => getDirectory(search, country),
         initialData: [],
-        staleTime: 60_000,
+        staleTime: 0,
     });
 };
 
@@ -24,6 +24,6 @@ export const useStats = () => {
         queryKey: ['stats'],
         queryFn: getStats,
         initialData: null,
-        staleTime: 60_000,
+        staleTime: 0,
     });
 };
