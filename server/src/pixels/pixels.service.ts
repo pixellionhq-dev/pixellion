@@ -1,7 +1,6 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { writeFile } from 'fs/promises';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -93,22 +92,19 @@ export class PixelsService {
             const ext = extname(file.originalname);
             const filename = `${uuidv4()}${ext}`;
 
-            if (r2Client && R2_BUCKET && R2_PUBLIC_URL) {
-                // Upload to Cloudflare R2 (persistent, CDN-backed)
-                const contentType = file.mimetype || 'application/octet-stream';
-                await r2Client.send(new PutObjectCommand({
-                    Bucket: R2_BUCKET,
-                    Key: `logos/${filename}`,
-                    Body: file.buffer,
-                    ContentType: contentType,
-                    CacheControl: 'public, max-age=31536000, immutable',
-                }));
-                finalLogoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
-            } else {
-                // Fallback: local disk (will be lost on Render redeploy)
-                await writeFile(`./uploads/${filename}`, file.buffer);
-                finalLogoUrl = `${process.env.API_URL || 'https://pixellion-ilos.onrender.com'}/uploads/${filename}`;
+            if (!r2Client || !R2_BUCKET || !R2_PUBLIC_URL) {
+                throw new InternalServerErrorException('R2 storage is not configured. Set R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_PUBLIC_URL on Render.');
             }
+
+            const contentType = file.mimetype || 'application/octet-stream';
+            await r2Client.send(new PutObjectCommand({
+                Bucket: R2_BUCKET,
+                Key: `logos/${filename}`,
+                Body: file.buffer,
+                ContentType: contentType,
+                CacheControl: 'public, max-age=31536000, immutable',
+            }));
+            finalLogoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
         }
 
         // Find buyer for this user
