@@ -129,7 +129,7 @@ function fetchImage(url, retryCount) {
   if (cache.size > IMAGE_CACHE_MAX) evictOne(url);
 
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  img.crossOrigin = "anonymous";
   img.decoding = 'async';
 
   const timeoutId = setTimeout(() => {
