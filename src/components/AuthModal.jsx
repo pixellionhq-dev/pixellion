@@ -33,11 +33,11 @@ export default function AuthModal({ isOpen, onClose }) {
     };
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
-            <div className="glass-card w-full max-w-md p-6 relative">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/30 backdrop-blur-[8px] animate-fade-in">
+            <div className="w-full max-w-md p-6 relative border border-white/60" style={{ borderRadius: 28, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', animation: 'fadeUp 250ms cubic-bezier(0.16,1,0.3,1) forwards' }}>
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition"
+                    className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/6 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition flex items-center justify-center"
                 >
                     ✕
                 </button>
@@ -57,7 +57,7 @@ export default function AuthModal({ isOpen, onClose }) {
                                 required
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                className="w-full"
+                                className="w-full h-[52px] rounded-[14px] border border-black/10 focus:ring-0 focus:border-[1.5px] focus:border-black/40"
                                 placeholder="e.g. Acme Corp"
                             />
                         </div>
@@ -71,7 +71,7 @@ export default function AuthModal({ isOpen, onClose }) {
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full"
+                            className="w-full h-[52px] rounded-[14px] border border-black/10 focus:ring-0 focus:border-[1.5px] focus:border-black/40"
                             placeholder="you@company.com"
                         />
                     </div>
@@ -84,7 +84,7 @@ export default function AuthModal({ isOpen, onClose }) {
                             required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full"
+                            className="w-full h-[52px] rounded-[14px] border border-black/10 focus:ring-0 focus:border-[1.5px] focus:border-black/40"
                             placeholder="••••••••"
                         />
                     </div>
@@ -94,9 +94,11 @@ export default function AuthModal({ isOpen, onClose }) {
                     <Button
                         type="submit"
                         disabled={loading}
-                        className="w-full mt-4 bg-[var(--color-text-primary)] hover:bg-black font-medium text-base rounded-lg shadow-none"
+                        className="w-full mt-4 h-[52px] bg-black hover:bg-black font-medium text-base rounded-[14px] shadow-none"
                     >
-                        {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Sign Up'}
+                        {loading ? (
+                            <span className="w-[18px] h-[18px] rounded-full border-2 border-white/30 border-t-white inline-block animate-spin" />
+                        ) : isLogin ? 'Sign In' : 'Sign Up'}
                     </Button>
                 </form>
 
