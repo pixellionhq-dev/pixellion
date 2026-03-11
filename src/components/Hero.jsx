@@ -28,28 +28,29 @@ export default function Hero() {
                 Buy pixels, upload your logo, and join the elite directory.
             </p>
 
-            {/* Quick Stats Grid */}
-            <div className="relative grid grid-cols-3 gap-3 md:gap-6 mt-4 max-w-3xl w-full">
-                <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 rounded-full" style={{ width: 600, height: 600, background: 'radial-gradient(circle, rgba(37,99,235,0.04) 0%, transparent 70%)' }} />
-                <div className="glass-card py-6 px-4 flex flex-col items-center justify-center opacity-0 animate-fade-up stagger-2">
-                    <span className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-                        {stats ? stats.totalPixelsSold.toLocaleString() : <span className="animate-pulse">...</span>}
-                    </span>
-                    <span className="text-sm font-medium text-[var(--color-text-tertiary)] mt-1">Pixels Claimed</span>
-                </div>
-                <div className="glass-card py-6 px-4 flex flex-col items-center justify-center opacity-0 animate-fade-up stagger-3">
-                    <span className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-                        {stats ? stats.totalBuyers.toLocaleString() : <span className="animate-pulse">...</span>}
-                    </span>
-                    <span className="text-sm font-medium text-[var(--color-text-tertiary)] mt-1">Active Brands</span>
-                </div>
-                <div className="glass-card py-6 px-4 flex flex-col items-center justify-center opacity-0 animate-fade-up stagger-4 border-transparent group transition-colors" style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #1e293b 100%)', boxShadow: '0 8px 32px rgba(37,99,235,0.2)' }}>
-                    <span className="text-2xl md:text-3xl font-bold tracking-tight text-white group-hover:scale-105 transition-transform">
-                        {stats ? `₹${stats.currentPixelPrice.toLocaleString('en-IN')}` : <span className="animate-pulse">...</span>}
-                    </span>
-                    <span className="text-sm font-medium text-white/60 mt-1">Current Price / px</span>
-                </div>
-            </div>
+                        {/* Quick Stats Grid */}
+                        <div className="grid grid-cols-3 gap-3 md:gap-6 mt-4 max-w-3xl w-full">
+                            <div className="glass-card py-6 px-4 flex flex-col items-center justify-center stagger-1">
+                                <span className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                                    {stats ? stats.totalPixelsSold.toLocaleString() : <span className="animate-pulse">...</span>}
+                                </span>
+                                <span className="text-sm font-medium text-[var(--color-text-tertiary)] mt-1">Pixels Claimed</span>
+                            </div>
+                            <div className="glass-card py-6 px-4 flex flex-col items-center justify-center stagger-2">
+                                <span className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
+                                    {stats ? stats.totalBuyers.toLocaleString() : <span className="animate-pulse">...</span>}
+                                </span>
+                                <span className="text-sm font-medium text-[var(--color-text-tertiary)] mt-1">Active Brands</span>
+                            </div>
+                            <div className="glass-card py-6 px-4 flex flex-col items-center justify-center stagger-3"
+                                style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #1e293b 100%)',
+                                                 boxShadow: '0 8px 32px rgba(37,99,235,0.2)' }}>
+                                <span className="text-2xl md:text-3xl font-bold tracking-tight text-white">
+                                    {stats ? `₹${stats.currentPixelPrice.toLocaleString('en-IN')}` : <span className="animate-pulse">...</span>}
+                                </span>
+                                <span className="text-sm font-medium text-white/60 mt-1">Current Price / px</span>
+                            </div>
+                        </div>
         </section>
     );
 }
