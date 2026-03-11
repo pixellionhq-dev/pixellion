@@ -206,7 +206,7 @@
 
 @layer utilities {
   .animate-fade-up {
-    animation: fadeUp 0.5s cubic-bezier(0.16,1,0.3,1) forwards;
+    animation: fadeUp 0.6s cubic-bezier(0.16,1,0.3,1) both;
   }
 
   .animate-fade-in {

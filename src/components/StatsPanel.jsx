@@ -17,7 +17,7 @@ export default function StatsPanel() {
 
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Most Expensive */}
-                    <Card className="group opacity-0 animate-fade-up stagger-1">
+                    <Card className="group animate-fade-up stagger-1">
                         <div className="flex items-center justify-between mb-4">
                             <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600 transition-all duration-300 group-hover:bg-orange-500 group-hover:text-white group-hover:shadow-[0_0_0_3px_rgba(234,88,12,0.15)]">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -36,7 +36,7 @@ export default function StatsPanel() {
                     </Card>
 
                     {/* Most Pixels Owned */}
-                    <Card className="group opacity-0 animate-fade-up" style={{ animationDelay: '80ms' }}>
+                    <Card className="group animate-fade-up" style={{ animationDelay: '80ms' }}>
                         <div className="flex items-center justify-between mb-4">
                             <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 transition-all duration-300 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-[0_0_0_3px_rgba(37,99,235,0.15)]">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -58,7 +58,7 @@ export default function StatsPanel() {
                     </Card>
 
                     {/* Total Value */}
-                    <Card className="group opacity-0 animate-fade-up" style={{ animationDelay: '160ms' }}>
+                    <Card className="group animate-fade-up" style={{ animationDelay: '160ms' }}>
                         <div className="flex items-center justify-between mb-4">
                             <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center text-green-600 transition-all duration-300 group-hover:bg-green-500 group-hover:text-white group-hover:shadow-[0_0_0_3px_rgba(34,197,94,0.15)]">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -81,7 +81,7 @@ export default function StatsPanel() {
                     </Card>
 
                     {/* Newest Entry */}
-                    <Card className="group opacity-0 animate-fade-up" style={{ animationDelay: '240ms' }}>
+                    <Card className="group animate-fade-up" style={{ animationDelay: '240ms' }}>
                         <div className="flex items-center justify-between mb-4">
                             <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 transition-all duration-300 group-hover:bg-purple-500 group-hover:text-white group-hover:shadow-[0_0_0_3px_rgba(168,85,247,0.15)]">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

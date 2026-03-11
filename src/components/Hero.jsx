@@ -4,7 +4,7 @@ export default function Hero() {
     const { data: stats } = useStats();
 
     return (
-        <section className="pt-40 pb-20 px-6 max-w-5xl mx-auto flex flex-col items-center text-center opacity-0 animate-fade-up relative">
+        <section className="pt-40 pb-20 px-6 max-w-5xl mx-auto flex flex-col items-center text-center animate-fade-up relative">
             {/* Live Indicator */}
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-8 border border-white/70" style={{ background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(18px)', boxShadow: '0 0 12px rgba(34,197,94,0.15)' }}>
                 <span className="relative flex h-2 w-2">
