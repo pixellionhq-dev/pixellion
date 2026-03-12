@@ -15,7 +15,11 @@ export class PixelsController {
     @UseGuards(JwtAuthGuard)
     @Post('purchase')
     @UseInterceptors(FileInterceptor('file', {
-        limits: { fileSize: 512 * 1024 },
+        limits: {
+            fileSize: 512 * 1024,
+            fieldSize: 10 * 1024 * 1024,
+            fields: 20,
+        },
         fileFilter: (req, file, cb) => {
             if (file.mimetype.match(/\/(jpg|jpeg|png|svg\+xml)$/)) cb(null, true);
             else cb(new BadRequestException('Unsupported file type'), false);
@@ -26,7 +30,12 @@ export class PixelsController {
         @UploadedFile() file: Express.Multer.File,
         @Body() body: any,
     ) {
-        const pixels = typeof body.pixels === 'string' ? JSON.parse(body.pixels) : body.pixels;
+        let pixels;
+        try {
+            pixels = typeof body.pixels === 'string' ? JSON.parse(body.pixels) : body.pixels;
+        } catch {
+            throw new BadRequestException('Invalid pixels payload');
+        }
         return this.pixelsService.purchase(
             req.user.sub,
             pixels,
