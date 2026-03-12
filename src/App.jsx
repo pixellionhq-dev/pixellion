@@ -9,11 +9,37 @@ import BuyerDirectory from './components/BuyerDirectory';
 import BrandProfile from './components/BrandProfile';
 import Pulse from './components/Pulse';
 import { apiClient } from './api/client';
+import { supabase } from './utils/supabase';
 
 export default function App() {
   const [pulseEvents, setPulseEvents] = useState([]);
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
+
+  useEffect(() => {
+    // Handle OAuth redirect callback
+    supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        try {
+          const response = await fetch(
+            `${import.meta.env.VITE_API_URL || 'https://pixellion-ilos.onrender.com'}/auth/supabase`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ supabase_token: session.access_token })
+            }
+          );
+          const data = await response.json();
+          if (data.token) {
+            localStorage.setItem('token', data.token);
+            window.location.reload();
+          }
+        } catch (err) {
+          console.error('Backend exchange failed:', err);
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
