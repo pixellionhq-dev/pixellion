@@ -19,6 +19,7 @@ export const purchasePixels = async (pixels, color, brandName, brandUrl, file, o
     const { data } = await apiClient.post('/pixels/purchase', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress,
+        timeout: 30_000,
     });
     return data;
 };

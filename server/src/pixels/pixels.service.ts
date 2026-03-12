@@ -109,6 +109,7 @@ export class PixelsService {
                 throw new InternalServerErrorException("Failed to upload logo to R2 storage.");
             }
             finalLogoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
+            console.log('R2 upload result:', finalLogoUrl);
         }
 
         // Find buyer for this user
@@ -137,6 +138,8 @@ export class PixelsService {
                         data: { color },
                     });
                 }
+
+                console.log('Saving to DB with logoUrl:', finalLogoUrl);
 
                 const purchase = await tx.purchase.create({
                     data: {

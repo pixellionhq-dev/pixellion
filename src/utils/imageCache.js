@@ -128,6 +128,8 @@ function fetchImage(url, retryCount) {
   cache.set(url, entry);
   if (cache.size > IMAGE_CACHE_MAX) evictOne(url);
 
+  console.log('[ImageCache] Fetching logo URL:', url);
+
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.decoding = 'async';
@@ -169,7 +171,10 @@ function fetchImage(url, retryCount) {
   };
 
   img.onload = () => onDone(true);
-  img.onerror = () => onDone(false);
+  img.onerror = (e) => {
+    console.error('[ImageCache] Failed to load logo URL (possible CORS issue):', url, e);
+    onDone(false);
+  };
   img.src = url;
 }
 

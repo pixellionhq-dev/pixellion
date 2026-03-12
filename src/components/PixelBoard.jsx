@@ -1426,7 +1426,12 @@ export default function PixelBoard() {
             }
         } catch (err) {
             queryClient.setQueryData(['pixels'], backupPixels);
-            setToastMessage(err.response?.data?.message || 'Purchase failed. Pixels may already be taken or overlap existing ones.');
+            const timeoutError = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+            const errorMessage = timeoutError
+                ? 'Purchase request timed out after 30 seconds. Please try again.'
+                : (err?.response?.data?.message || 'Purchase failed. Pixels may already be taken or overlap existing ones.');
+            setPurchaseError(errorMessage);
+            setToastMessage(errorMessage);
             setTimeout(() => setToastMessage(null), 3000);
             refetch();
         } finally {
