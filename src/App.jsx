@@ -20,6 +20,9 @@ export default function App() {
     // Handle OAuth redirect callback
     supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
+        const existingToken = localStorage.getItem('token');
+        if (existingToken) return; // already logged in, skip
+
         try {
           const response = await fetch(
             `${import.meta.env.VITE_API_URL || 'https://pixellion-ilos.onrender.com'}/auth/supabase`,
