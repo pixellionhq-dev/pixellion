@@ -12,6 +12,7 @@ export default function AuthModal({ isOpen, onClose }) {
     const [loading, setLoading] = useState(false);
     const [supabaseMode, setSupabaseMode] = useState('options'); // 'options' | 'email' | 'password'
     const [otpSent, setOtpSent] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
 
     if (!isOpen) return null;
 
@@ -34,9 +35,13 @@ export default function AuthModal({ isOpen, onClose }) {
         setError('');
         setLoading(true);
         try {
-            const { error } = await supabase.auth.signInWithOtp({ email });
+            const { error } = await supabase.auth.signInWithOtp({
+                email,
+                options: { shouldCreateUser: true },
+            });
             if (error) throw error;
             setOtpSent(true);
+            setOtpCode('');
         } catch (err) {
             setError(err.message || 'Email OTP failed');
         } finally {
@@ -44,18 +49,27 @@ export default function AuthModal({ isOpen, onClose }) {
         }
     };
 
-    const handleSupabaseSession = async () => {
+    const handleVerifyOtp = async () => {
         setError('');
         setLoading(true);
         try {
-            const { data: { session }, error } = await supabase.auth.getSession();
-            if (error || !session?.access_token) throw error || new Error('No session');
+            const { data, error } = await supabase.auth.verifyOtp({
+                email,
+                token: otpCode,
+                type: 'email',
+            });
+            if (error) throw error;
+            const accessToken = data.session?.access_token;
+            if (!accessToken) throw new Error('No session after OTP verify');
             const res = await fetch('/api/auth/supabase', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ supabase_token: session.access_token }),
+                body: JSON.stringify({ supabase_token: accessToken }),
             });
-            if (!res.ok) throw new Error('Backend auth failed');
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.message || 'Backend auth failed');
+            }
             onClose();
         } catch (err) {
             setError(err.message || 'Sign in failed');
@@ -157,30 +171,45 @@ export default function AuthModal({ isOpen, onClose }) {
                             disabled={loading || !email}
                             className="w-full h-[52px] bg-black text-white font-medium text-sm rounded-[14px] shadow-none"
                         >
-                            {loading ? <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white inline-block animate-spin" /> : 'Send magic link'}
+                            {loading ? <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white inline-block animate-spin" /> : 'Send code'}
                         </Button>
                     </div>
                 )}
 
-                {/* Email OTP — check inbox prompt */}
+                {/* Email OTP — enter 6-digit code */}
                 {supabaseMode === 'email' && otpSent && (
-                    <div className="text-center space-y-4">
-                        <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center mx-auto">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h9"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="m16 19 2 2 4-4"/>
-                            </svg>
+                    <div className="space-y-4">
+                        <button onClick={() => { setOtpSent(false); setOtpCode(''); }} className="flex items-center gap-1 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] transition-colors">
+                            ← Back
+                        </button>
+                        <div className="text-center">
+                            <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-3">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+                                </svg>
+                            </div>
+                            <p className="font-semibold text-[var(--color-text-primary)] text-sm">Check your email</p>
+                            <p className="text-xs text-[var(--color-text-tertiary)] mt-1">We sent a 6-digit code to <strong>{email}</strong></p>
                         </div>
-                        <p className="font-semibold text-[var(--color-text-primary)]">Check your email</p>
-                        <p className="text-sm text-[var(--color-text-tertiary)]">We sent a magic link to <strong>{email}</strong></p>
+                        <Input
+                            type="text"
+                            autoFocus
+                            value={otpCode}
+                            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            className="w-full h-[52px] rounded-[14px] border border-black/10 text-center text-2xl tracking-[0.5em] font-mono"
+                            placeholder="000000"
+                            maxLength={6}
+                            inputMode="numeric"
+                        />
                         <Button
-                            onClick={handleSupabaseSession}
-                            disabled={loading}
+                            onClick={handleVerifyOtp}
+                            disabled={loading || otpCode.length !== 6}
                             className="w-full h-[52px] bg-black text-white font-medium text-sm rounded-[14px] shadow-none"
                         >
-                            {loading ? <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white inline-block animate-spin" /> : "I've clicked the link"}
+                            {loading ? <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white inline-block animate-spin" /> : 'Verify & Sign In'}
                         </Button>
-                        <button onClick={() => { setOtpSent(false); setSupabaseMode('email'); }} className="text-sm text-[var(--color-text-tertiary)] hover:underline">
-                            Resend
+                        <button onClick={handleEmailOtp} disabled={loading} className="w-full text-center text-xs text-[var(--color-text-tertiary)] hover:underline disabled:opacity-50">
+                            Resend code
                         </button>
                     </div>
                 )}

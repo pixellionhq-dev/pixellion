@@ -102,48 +102,51 @@ export class AuthService {
         ];
         return colors[Math.floor(Math.random() * colors.length)];
     }
-        async supabaseLogin(supabase_token: string) {
-            const { createClient } = await import('@supabase/supabase-js');
-            const supabaseUrl = process.env.SUPABASE_URL;
-            const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-            if (!supabaseUrl || !supabaseServiceRoleKey) {
-                throw new UnauthorizedException('Supabase env vars missing');
-            }
-            const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-            // Validate token and get user
-            const { data, error } = await supabase.auth.getUser(supabase_token);
-            if (error || !data?.user) {
-                throw new UnauthorizedException('Invalid Supabase token');
-            }
-            const email = data.user.email;
-            if (!email) {
-                throw new UnauthorizedException('No email found');
-            }
-            // Check if user exists
-            let user = await this.prisma.user.findUnique({ where: { email }, include: { buyer: true } });
-            if (!user) {
-                // Create user and buyer
-                const username = email.split('@')[0];
-                const { user: newUser, buyer } = await this.prisma.$transaction(async (tx) => {
-                    const newUser = await tx.user.create({ data: { email, username, passwordHash: '' } });
-                    const buyer = await tx.buyer.create({
-                        data: {
-                            userId: newUser.id,
-                            country: 'US',
-                            flag: '\ud83c\uddfa\ud83c\uddf8',
-                            color: this.generateColor(),
-                        },
-                    });
-                    return { user: newUser, buyer };
-                });
-                user = { ...newUser, buyer };
-            }
-            // Issue JWT
-            const token = this.jwtService.sign({ sub: user.id, email: user.email });
-            return {
-                token,
-                user: { id: user.id, email: user.email, username: user.username },
-                buyer: user.buyer ? { id: user.buyer.id, color: user.buyer.color } : null,
-            };
+    async supabaseLogin(supabase_token: string) {
+        console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? 'set' : 'MISSING');
+        console.log('SERVICE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'set' : 'MISSING');
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!supabaseUrl || !supabaseServiceRoleKey) {
+            throw new UnauthorizedException('Supabase env vars missing');
         }
+        const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+        // Validate token and get user
+        const { data, error } = await supabase.auth.getUser(supabase_token);
+        if (error || !data?.user) {
+            console.log('Supabase getUser error:', error?.message);
+            throw new UnauthorizedException('Invalid Supabase token');
+        }
+        const email = data.user.email;
+        if (!email) {
+            throw new UnauthorizedException('No email found in Supabase user');
+        }
+        // Check if user exists
+        let user = await this.prisma.user.findUnique({ where: { email }, include: { buyer: true } });
+        if (!user) {
+            // Create user and buyer
+            const username = email.split('@')[0];
+            const { user: newUser, buyer } = await this.prisma.$transaction(async (tx) => {
+                const newUser = await tx.user.create({ data: { email, username, passwordHash: '' } });
+                const buyer = await tx.buyer.create({
+                    data: {
+                        userId: newUser.id,
+                        country: 'US',
+                        flag: '🇺🇸',
+                        color: this.generateColor(),
+                    },
+                });
+                return { user: newUser, buyer };
+            });
+            user = { ...newUser, buyer };
+        }
+        // Issue JWT
+        const token = this.jwtService.sign({ sub: user.id, email: user.email });
+        return {
+            token,
+            user: { id: user.id, email: user.email, username: user.username },
+            buyer: user.buyer ? { id: user.buyer.id, color: user.buyer.color } : null,
+        };
+    }
 }
