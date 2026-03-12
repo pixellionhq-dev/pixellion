@@ -23,4 +23,9 @@ export class AuthController {
     async me(@Request() req) {
         return this.authService.getProfile(req.user.sub);
     }
+
+        @Post('supabase')
+        async supabase(@Body() body: { supabase_token: string }) {
+            return this.authService.supabaseLogin(body.supabase_token);
+        }
 }
