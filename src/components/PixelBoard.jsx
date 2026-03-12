@@ -1063,11 +1063,6 @@ export default function PixelBoard() {
                             newSet.add(`${x},${y}`);
                         }
                     }
-                    if (newSet.size > 2000) {
-                        setToastMessage('Maximum 2000 pixels');
-                        setTimeout(() => setToastMessage(null), 3000);
-                        return prev;
-                    }
                     return newSet;
                 }
             });
@@ -1441,11 +1436,6 @@ export default function PixelBoard() {
 
     // Block allocation
     const allocateBlock = useCallback((blockW, blockH) => {
-        if (blockW * blockH > 2500) {
-            setToastMessage('Maximum 2000 target pixels');
-            setTimeout(() => setToastMessage(null), 3000);
-            return;
-        }
         const newSet = new Set();
         let found = false;
 
@@ -1531,19 +1521,19 @@ export default function PixelBoard() {
                         <div>
                             <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1">Pixel count</label>
                             <Input
-                                type="number" min="1" max="2000" value={quantityInput} onChange={e => setQuantityInput(e.target.value)}
-                                placeholder="e.g. 2000" className="w-24 px-3 py-1.5 min-h-[32px] text-sm"
+                                type="number" min="1" value={quantityInput} onChange={e => setQuantityInput(e.target.value)}
+                                placeholder="e.g. 5000" className="w-24 px-3 py-1.5 min-h-[32px] text-sm"
                             />
                         </div>
                         <Button
                             onClick={() => {
                                 const n = parseInt(quantityInput, 10);
-                                if (n > 0 && n <= 2500) {
+                                if (n > 0) {
                                     let w = Math.floor(Math.sqrt(n));
                                     while (n % w !== 0 && w > 1) { w--; }
                                     allocateBlock(w, Math.floor(n / w));
                                 }
-                                else alert('Enter 1–2500');
+                                else alert('Enter a value greater than 0');
                             }}
                             className="px-3 py-1.5 text-sm rounded shadow-none"
                         >Select</Button>
@@ -1645,8 +1635,7 @@ export default function PixelBoard() {
                         className="fixed -translate-x-1/2 z-[100] bg-black text-white text-sm font-bold px-4 py-2 rounded-full shadow pointer-events-none transition-colors"
                         style={{
                             left: cursorPos.x,
-                            top: cursorPos.y - 50,
-                            backgroundColor: dragPixelCount > 2000 ? '#ef4444' : '#000000'
+                            top: cursorPos.y - 50
                         }}
                     >
                         {dragPixelCount} px

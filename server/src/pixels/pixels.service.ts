@@ -75,7 +75,6 @@ export class PixelsService {
 
     async purchase(userId: string, pixels: { x: number; y: number }[], color?: string, brandName?: string, brandUrl?: string, file?: Express.Multer.File, fitMode?: string, imageWidth?: number, imageHeight?: number) {
         if (!pixels.length) throw new BadRequestException('No pixels selected');
-        if (pixels.length > 2500) throw new BadRequestException('Maximum 2500 pixels per purchase');
 
         if (!brandName || brandName.trim() === '') {
             throw new BadRequestException('Brand name is required');
