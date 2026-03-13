@@ -155,9 +155,19 @@ export class PixelsService {
                     },
                 });
 
-                await tx.pixel.createMany({
-                    data: coords.map((c) => ({ x: c.x, y: c.y, ownerId: buyer.id, purchaseId: purchase.id, color: pixelColor })),
-                });
+                const pixelRows = coords.map((c) => ({
+                    x: c.x,
+                    y: c.y,
+                    ownerId: buyer.id,
+                    purchaseId: purchase.id,
+                    color: pixelColor,
+                }));
+
+                const batchSize = 500;
+                for (let i = 0; i < pixelRows.length; i += batchSize) {
+                    const batch = pixelRows.slice(i, i + batchSize);
+                    await tx.pixel.createMany({ data: batch });
+                }
 
                 return { purchase };
             }, {
