@@ -163,7 +163,7 @@ export class PixelsService {
                     color: pixelColor,
                 }));
 
-                const batchSize = 500;
+                const batchSize = 100;
                 for (let i = 0; i < pixelRows.length; i += batchSize) {
                     const batch = pixelRows.slice(i, i + batchSize);
                     await tx.pixel.createMany({ data: batch });
