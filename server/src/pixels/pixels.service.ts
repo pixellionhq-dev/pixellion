@@ -1,6 +1,5 @@
 import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -112,80 +111,60 @@ export class PixelsService {
             console.log('R2 upload result:', finalLogoUrl);
         }
 
-        // Find buyer for this user
-        const buyer = await this.prisma.buyer.findUnique({ where: { userId } });
-        if (!buyer) throw new BadRequestException('No buyer profile found');
+        // Ensure buyer exists and update color when provided
+        const buyer = await this.prisma.buyer.upsert({
+            where: { userId },
+            update: color ? { color } : {},
+            create: {
+                userId,
+                ...(color ? { color } : {}),
+            },
+        });
 
         const coords = pixels.map((p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) }));
         const totalPrice = pixels.length * PIXEL_PRICE;
         const pixelColor = color || buyer.color;
 
-        // Transaction with unique-constraint safety net for concurrent purchases
-        try {
-            const result = await this.prisma.$transaction(async (tx) => {
-                // Ensure the check for existing pixels specifically compares the incoming (x, y) coordinates
-                const existing = await tx.pixel.findMany({
-                    where: { OR: coords.map((c) => ({ x: c.x, y: c.y })) },
-                });
+        console.log('Saving to DB with logoUrl:', finalLogoUrl);
 
-                if (existing.length > 0) {
-                    throw new BadRequestException(`${existing.length} pixel(s) already owned`);
-                }
-
-                if (color) {
-                    await tx.buyer.update({
-                        where: { id: buyer.id },
-                        data: { color },
-                    });
-                }
-
-                console.log('Saving to DB with logoUrl:', finalLogoUrl);
-
-                const purchase = await tx.purchase.create({
-                    data: {
-                        buyerId: buyer.id,
-                        brandName,
-                        url: safeBrandUrl,
-                        ...(finalLogoUrl ? { logoUrl: finalLogoUrl } : {}),
-                        fitMode: fitMode || 'cover',
-                        ...(imageWidth ? { imageWidth } : {}),
-                        ...(imageHeight ? { imageHeight } : {}),
-                        pixelCount: pixels.length,
-                        totalPrice,
-                    },
-                });
-
-                const pixelRows = coords.map((c) => ({
-                    x: c.x,
-                    y: c.y,
-                    ownerId: buyer.id,
-                    purchaseId: purchase.id,
-                    color: pixelColor,
-                }));
-
-                const batchSize = 100;
-                for (let i = 0; i < pixelRows.length; i += batchSize) {
-                    const batch = pixelRows.slice(i, i + batchSize);
-                    await tx.pixel.createMany({ data: batch });
-                }
-
-                return { purchase };
-            }, {
-                isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-            });
-
-            return {
-                purchaseId: result.purchase.id,
+        const purchase = await this.prisma.purchase.create({
+            data: {
+                buyerId: buyer.id,
+                brandName,
+                url: safeBrandUrl,
+                ...(finalLogoUrl ? { logoUrl: finalLogoUrl } : {}),
+                fitMode: fitMode || 'cover',
+                ...(imageWidth ? { imageWidth } : {}),
+                ...(imageHeight ? { imageHeight } : {}),
                 pixelCount: pixels.length,
                 totalPrice,
-                pixels: coords.map((p) => ({ ...p, color: pixelColor })),
-            };
-        } catch (err: any) {
-            // Prisma P2002 = unique constraint violation (concurrent purchase race)
-            if (err?.code === 'P2002') {
-                throw new BadRequestException('Some of the selected pixels were just purchased by another user. Please refresh and try again.');
+            },
+        });
+
+        const pixelData = coords.map((c) => ({
+            x: c.x,
+            y: c.y,
+            ownerId: buyer.id,
+            purchaseId: purchase.id,
+            color: pixelColor,
+        }));
+
+        setImmediate(async () => {
+            try {
+                for (let i = 0; i < pixelData.length; i += 100) {
+                    const batch = pixelData.slice(i, i + 100);
+                    await this.prisma.pixel.createMany({ data: batch, skipDuplicates: true });
+                }
+            } catch (error) {
+                console.error('Async pixel insert failed:', error);
             }
-            throw err;
-        }
+        });
+
+        return {
+            purchaseId: purchase.id,
+            pixelCount: pixels.length,
+            totalPrice,
+            pixels: coords.map((p) => ({ ...p, color: pixelColor })),
+        };
     }
 }
