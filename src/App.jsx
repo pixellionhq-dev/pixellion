@@ -18,8 +18,13 @@ export default function App() {
 
   useEffect(() => {
     // Handle OAuth redirect callback
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
+        const { data } = await supabase.auth.getSession();
+        if (!data?.session?.access_token) return;
+
         const existingToken = localStorage.getItem('token');
         if (existingToken) return; // already logged in, skip
 
@@ -42,6 +47,10 @@ export default function App() {
         }
       }
     });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {

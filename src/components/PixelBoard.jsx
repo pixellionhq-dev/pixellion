@@ -90,6 +90,7 @@ export default function PixelBoard() {
     const fetchedViewportTiles = useRef(new Set());
     const viewportDebounceTimerRef = useRef(null);
     const lastViewportKeyRef = useRef('');
+    const hasInitialViewportFetchRef = useRef(false);
 
     // Heatmap toggle
     const [heatmapVisible, setHeatmapVisible] = useState(false);
@@ -372,6 +373,17 @@ export default function PixelBoard() {
             fitToViewport();
         }
     }, [canvasSize, fitToViewport]);
+
+    useEffect(() => {
+        if (hasInitialViewportFetchRef.current) return;
+        const bounds = getViewportBounds();
+        if (!bounds) return;
+
+        hasInitialViewportFetchRef.current = true;
+        fetchViewportPixels(bounds).catch(() => {
+            // Keep initial viewport load resilient.
+        });
+    }, [getViewportBounds, fetchViewportPixels]);
 
     // Viewport-based pixel fetching (debounced + region cache)
     useEffect(() => {
