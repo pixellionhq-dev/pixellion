@@ -32,8 +32,28 @@ const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || '').replace(/\/+$/, '');
 export class PixelsService {
     constructor(private prisma: PrismaService) { }
 
-    async getAllOwned() {
+    async getAllOwned(viewport?: { minX?: number; minY?: number; maxX?: number; maxY?: number }) {
+        const hasViewport =
+            Number.isFinite(viewport?.minX)
+            && Number.isFinite(viewport?.minY)
+            && Number.isFinite(viewport?.maxX)
+            && Number.isFinite(viewport?.maxY);
+
         const pixels = await this.prisma.pixel.findMany({
+            ...(hasViewport
+                ? {
+                    where: {
+                        x: {
+                            gte: viewport!.minX!,
+                            lte: viewport!.maxX!,
+                        },
+                        y: {
+                            gte: viewport!.minY!,
+                            lte: viewport!.maxY!,
+                        },
+                    },
+                }
+                : {}),
             include: {
                 owner: { select: { id: true, country: true, flag: true, color: true } },
                 purchase: { select: { id: true, brandName: true, url: true, logoUrl: true, fitMode: true, imageWidth: true, imageHeight: true } }

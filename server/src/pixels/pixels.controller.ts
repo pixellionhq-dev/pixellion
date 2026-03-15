@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards, Request, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards, Request, UseInterceptors, UploadedFile, BadRequestException, Query } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PixelsService } from './pixels.service';
 import { JwtAuthGuard } from '../auth/auth.guard';
@@ -8,8 +8,24 @@ export class PixelsController {
     constructor(private pixelsService: PixelsService) { }
 
     @Get()
-    async getAll() {
-        return this.pixelsService.getAllOwned();
+    async getAll(
+        @Query('minX') minX?: string,
+        @Query('minY') minY?: string,
+        @Query('maxX') maxX?: string,
+        @Query('maxY') maxY?: string,
+    ) {
+        const parse = (value?: string) => {
+            if (value === undefined || value === null || value === '') return undefined;
+            const parsed = parseInt(value, 10);
+            return Number.isNaN(parsed) ? undefined : parsed;
+        };
+
+        return this.pixelsService.getAllOwned({
+            minX: parse(minX),
+            minY: parse(minY),
+            maxX: parse(maxX),
+            maxY: parse(maxY),
+        });
     }
 
     @UseGuards(JwtAuthGuard)
