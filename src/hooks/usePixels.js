@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPixels, purchasePixels } from '../api/pixels';
 
-export const usePixels = () => {
+export const usePixels = ({ enabled = true } = {}) => {
     const queryClient = useQueryClient();
 
     const { data: pixels, isLoading, refetch } = useQuery({
@@ -10,6 +10,7 @@ export const usePixels = () => {
         initialData: [],
         staleTime: 0,
         refetchOnWindowFocus: false,
+        enabled,
     });
 
     const purchaseMutation = useMutation({
