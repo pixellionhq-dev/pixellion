@@ -20,7 +20,15 @@ export default function AuthModal({ isOpen, onClose }) {
         setError('');
         setLoading(true);
         try {
-            await supabase.auth.signOut();
+            try {
+                await Promise.race([
+                    supabase.auth.signOut(),
+                    new Promise(resolve => setTimeout(resolve, 2000)),
+                ]);
+            } catch (e) {
+                // ignore signout errors
+            }
+
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: { redirectTo: window.location.origin },

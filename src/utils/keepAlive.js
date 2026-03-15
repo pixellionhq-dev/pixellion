@@ -10,9 +10,19 @@ export function startKeepAlive() {
     }
   };
 
+  const warmStats = async () => {
+    try {
+      await fetch(`${BACKEND_URL}/stats`);
+    } catch (e) {
+      // silent fail
+    }
+  };
+
   // Ping immediately on load
   ping();
+  warmStats();
 
   // Ping backend every 4 minutes to prevent sleep
   setInterval(ping, 4 * 60 * 1000);
+  setInterval(warmStats, 4 * 60 * 1000);
 }

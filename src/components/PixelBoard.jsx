@@ -35,9 +35,6 @@ function getDomain(url) {
 }
 
 export default function PixelBoard() {
-    const VIEWPORT_FETCH_DEBOUNCE_MS = 200;
-    const VIEWPORT_TILE_SIZE = 200;
-
     const queryClient = useQueryClient();
     const canvasRef = useRef(null);
     const overlayCanvasRef = useRef(null);
@@ -81,16 +78,12 @@ export default function PixelBoard() {
     const currentDragStart = useRef(null);
     const currentDragEnd = useRef(null);
 
-    const { pixels: ownedPixels, isLoading, purchase } = usePixels({ enabled: false });
+    const { pixels: ownedPixels, isLoading, purchase, refetch } = usePixels();
     const { user } = useAuth();
     const [isProcessing, setIsProcessing] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 });
-    const fetchedViewportTiles = useRef(new Set());
-    const viewportDebounceTimerRef = useRef(null);
-    const lastViewportKeyRef = useRef('');
-    const hasInitialViewportFetchRef = useRef(false);
 
     // Heatmap toggle
     const [heatmapVisible, setHeatmapVisible] = useState(false);
@@ -239,59 +232,6 @@ export default function PixelBoard() {
         ctx.drawImage(img, sx, sy, cropW, cropH, x, y, w, h);
     }, []);
 
-    const getViewportBounds = useCallback(() => {
-        if (canvasSize.w <= 0 || canvasSize.h <= 0) return null;
-        const c = camera.current;
-        const minX = Math.max(0, Math.floor(c.x));
-        const minY = Math.max(0, Math.floor(c.y));
-        const maxX = Math.min(BOARD_WIDTH - 1, Math.ceil(c.x + canvasSize.w / c.zoom) - 1);
-        const maxY = Math.min(BOARD_HEIGHT - 1, Math.ceil(c.y + canvasSize.h / c.zoom) - 1);
-        if (maxX < minX || maxY < minY) return null;
-        return { minX, minY, maxX, maxY };
-    }, [canvasSize]);
-
-    const fetchViewportPixels = useCallback(async (bounds) => {
-        const startTileX = Math.floor(bounds.minX / VIEWPORT_TILE_SIZE);
-        const endTileX = Math.floor(bounds.maxX / VIEWPORT_TILE_SIZE);
-        const startTileY = Math.floor(bounds.minY / VIEWPORT_TILE_SIZE);
-        const endTileY = Math.floor(bounds.maxY / VIEWPORT_TILE_SIZE);
-
-        const missingTiles = [];
-        for (let tx = startTileX; tx <= endTileX; tx++) {
-            for (let ty = startTileY; ty <= endTileY; ty++) {
-                const tileKey = `${tx},${ty}`;
-                if (!fetchedViewportTiles.current.has(tileKey)) {
-                    missingTiles.push({ tx, ty, tileKey });
-                }
-            }
-        }
-
-        if (missingTiles.length === 0) return;
-
-        const reqMinX = Math.max(0, Math.min(...missingTiles.map(t => t.tx * VIEWPORT_TILE_SIZE)));
-        const reqMinY = Math.max(0, Math.min(...missingTiles.map(t => t.ty * VIEWPORT_TILE_SIZE)));
-        const reqMaxX = Math.min(BOARD_WIDTH - 1, Math.max(...missingTiles.map(t => ((t.tx + 1) * VIEWPORT_TILE_SIZE) - 1)));
-        const reqMaxY = Math.min(BOARD_HEIGHT - 1, Math.max(...missingTiles.map(t => ((t.ty + 1) * VIEWPORT_TILE_SIZE) - 1)));
-
-        const res = await apiClient.get('/pixels', {
-            params: {
-                minX: reqMinX,
-                minY: reqMinY,
-                maxX: reqMaxX,
-                maxY: reqMaxY,
-            },
-        });
-
-        const incomingPixels = Array.isArray(res.data) ? res.data : [];
-        queryClient.setQueryData(['pixels'], (old) => {
-            const merged = new Map();
-            (old || []).forEach((p) => merged.set(`${p.x},${p.y}`, p));
-            incomingPixels.forEach((p) => merged.set(`${p.x},${p.y}`, p));
-            return Array.from(merged.values());
-        });
-
-        missingTiles.forEach((tile) => fetchedViewportTiles.current.add(tile.tileKey));
-    }, [queryClient]);
 
     // --- Coordinate transforms ---
     const boardToScreen = useCallback((bx, by) => {
@@ -374,48 +314,6 @@ export default function PixelBoard() {
         }
     }, [canvasSize, fitToViewport]);
 
-    useEffect(() => {
-        if (hasInitialViewportFetchRef.current) return;
-        const bounds = getViewportBounds();
-        if (!bounds) return;
-
-        hasInitialViewportFetchRef.current = true;
-        fetchViewportPixels(bounds).catch(() => {
-            // Keep initial viewport load resilient.
-        });
-    }, [getViewportBounds, fetchViewportPixels]);
-
-    // Viewport-based pixel fetching (debounced + region cache)
-    useEffect(() => {
-        const scheduleViewportFetch = () => {
-            const bounds = getViewportBounds();
-            if (!bounds) return;
-
-            const viewportKey = `${bounds.minX}:${bounds.minY}:${bounds.maxX}:${bounds.maxY}`;
-            if (viewportKey === lastViewportKeyRef.current) return;
-            lastViewportKeyRef.current = viewportKey;
-
-            if (viewportDebounceTimerRef.current) {
-                clearTimeout(viewportDebounceTimerRef.current);
-            }
-
-            viewportDebounceTimerRef.current = setTimeout(() => {
-                fetchViewportPixels(bounds).catch(() => {
-                    // Keep viewport fetching resilient.
-                });
-            }, VIEWPORT_FETCH_DEBOUNCE_MS);
-        };
-
-        scheduleViewportFetch();
-        const intervalId = setInterval(scheduleViewportFetch, 100);
-
-        return () => {
-            clearInterval(intervalId);
-            if (viewportDebounceTimerRef.current) {
-                clearTimeout(viewportDebounceTimerRef.current);
-            }
-        };
-    }, [getViewportBounds, fetchViewportPixels]);
 
     // --- Draw base board (grid + owned pixels + logos) ---
     const drawBaseBoard = useCallback(() => {
@@ -1537,12 +1435,7 @@ export default function PixelBoard() {
             setPurchaseError(errorMessage);
             setToastMessage(errorMessage);
             setTimeout(() => setToastMessage(null), 3000);
-            const bounds = getViewportBounds();
-            if (bounds) {
-                fetchViewportPixels(bounds).catch(() => {
-                    // Keep purchase recovery resilient.
-                });
-            }
+            refetch();
         } finally {
             setIsProcessing(false);
         }
