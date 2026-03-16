@@ -6,11 +6,12 @@ export const usePixels = () => {
 
     const { data: pixels, isLoading, refetch } = useQuery({
         queryKey: ['pixels'],
-        queryFn: () => getPixels({ minX: 0, minY: 0, maxX: 200, maxY: 200 }),
+        queryFn: () => getPixels(),
         initialData: [],
-        staleTime: 30_000,
-        cacheTime: 5 * 60 * 1000,
+        staleTime: 60_000,
+        cacheTime: 10 * 60 * 1000,
         refetchOnWindowFocus: false,
+        refetchOnMount: false,
     });
 
     const purchaseMutation = useMutation({

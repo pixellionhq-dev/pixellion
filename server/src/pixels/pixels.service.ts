@@ -55,8 +55,7 @@ export class PixelsService {
                 }
                 : {}),
             include: {
-                owner: { select: { id: true, country: true, flag: true, color: true } },
-                purchase: { select: { id: true, brandName: true, url: true, logoUrl: true, fitMode: true, imageWidth: true, imageHeight: true } }
+                purchase: { select: { brandName: true, logoUrl: true, fitMode: true, imageWidth: true, imageHeight: true } }
             },
         });
         return pixels.map((p) => ({
@@ -67,13 +66,10 @@ export class PixelsService {
             ownerId: p.ownerId,
             purchaseId: p.purchaseId,
             ownerName: p.purchase?.brandName || 'Anonymous',
-            ownerUrl: p.purchase?.url,
             ownerLogo: p.purchase?.logoUrl,
             fitMode: p.purchase?.fitMode,
             imageWidth: p.purchase?.imageWidth,
             imageHeight: p.purchase?.imageHeight,
-            country: p.owner.country,
-            flag: p.owner.flag,
         }));
     }
 

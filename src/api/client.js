@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const apiClient = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'https://pixellion-ilos.onrender.com',
+    baseURL: import.meta.env.VITE_API_URL || 'https://seashell-app-f4kca.ondigitalocean.app',
     withCredentials: false,
     timeout: 30_000,
 });
