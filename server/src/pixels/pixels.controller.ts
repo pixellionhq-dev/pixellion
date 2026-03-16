@@ -14,17 +14,30 @@ export class PixelsController {
         @Query('maxX') maxX?: string,
         @Query('maxY') maxY?: string,
     ) {
+        if ([minX, minY, maxX, maxY].some(v => v === undefined || v === null || v === '')) {
+            throw new BadRequestException('Viewport params required');
+        }
+
         const parse = (value?: string) => {
             if (value === undefined || value === null || value === '') return undefined;
             const parsed = parseInt(value, 10);
             return Number.isNaN(parsed) ? undefined : parsed;
         };
 
+        const parsedMinX = parse(minX);
+        const parsedMinY = parse(minY);
+        const parsedMaxX = parse(maxX);
+        const parsedMaxY = parse(maxY);
+
+        if ([parsedMinX, parsedMinY, parsedMaxX, parsedMaxY].some(v => v === undefined)) {
+            throw new BadRequestException('Viewport params required');
+        }
+
         return this.pixelsService.getAllOwned({
-            minX: parse(minX),
-            minY: parse(minY),
-            maxX: parse(maxX),
-            maxY: parse(maxY),
+            minX: parsedMinX,
+            minY: parsedMinY,
+            maxX: parsedMaxX,
+            maxY: parsedMaxY,
         });
     }
 

@@ -23,6 +23,8 @@ import {
 
 // Keep legacy alias
 const BOARD_SIZE = BOARD_WIDTH;
+const VIEWPORT_FETCH_DEBOUNCE_MS = 500;
+const VIEWPORT_MOVE_THRESHOLD = 20;
 
 function getDomain(url) {
     if (!url) return '';
@@ -78,7 +80,7 @@ export default function PixelBoard() {
     const currentDragStart = useRef(null);
     const currentDragEnd = useRef(null);
 
-    const { pixels: ownedPixels, isLoading, purchase, refetch } = usePixels();
+    const { pixels: ownedPixels, isLoading, purchase, refetch, fetchViewportPixels } = usePixels();
     const { user } = useAuth();
     const [isProcessing, setIsProcessing] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
@@ -87,6 +89,11 @@ export default function PixelBoard() {
 
     // Heatmap toggle
     const [heatmapVisible, setHeatmapVisible] = useState(false);
+    const viewportFetchTimerRef = useRef(null);
+    const lastFetchedViewportRef = useRef('');
+    const lastCameraRef = useRef({ x: NaN, y: NaN, zoom: NaN });
+    const lastFetchCameraRef = useRef({ x: NaN, y: NaN, zoom: NaN });
+    const lastFetchedBoundsRef = useRef(null);
 
     // Purchase highlight animation
     const purchaseHighlight = useRef(null); // { bounds: {minX,minY,maxX,maxY}, startTime }
@@ -250,6 +257,78 @@ export default function PixelBoard() {
         };
     }, []);
 
+    const getViewportBounds = useCallback(() => {
+        const c = camera.current;
+        const { w, h } = canvasSize;
+        if (!w || !h || !c.zoom) return null;
+
+        const minX = Math.max(0, Math.floor(c.x));
+        const minY = Math.max(0, Math.floor(c.y));
+        const maxX = Math.min(BOARD_WIDTH - 1, Math.ceil(c.x + w / c.zoom));
+        const maxY = Math.min(BOARD_HEIGHT - 1, Math.ceil(c.y + h / c.zoom));
+
+        if (maxX < minX || maxY < minY) return null;
+        return { minX, minY, maxX, maxY };
+    }, [canvasSize]);
+
+    const queueViewportFetch = useCallback((immediate = false) => {
+        const bounds = getViewportBounds();
+        if (!bounds) return;
+
+        const currentCamera = camera.current;
+        const lastFetchCamera = lastFetchCameraRef.current;
+
+        if (!immediate) {
+            const movedTooLittle =
+                Math.abs(currentCamera.x - lastFetchCamera.x) < VIEWPORT_MOVE_THRESHOLD
+                && Math.abs(currentCamera.y - lastFetchCamera.y) < VIEWPORT_MOVE_THRESHOLD
+                && Math.abs(currentCamera.zoom - lastFetchCamera.zoom) < 0.01;
+
+            if (movedTooLittle) return;
+        }
+
+        const lastBounds = lastFetchedBoundsRef.current;
+        if (!immediate && lastBounds) {
+            const changedEnough =
+                Math.abs(bounds.minX - lastBounds.minX) >= VIEWPORT_MOVE_THRESHOLD
+                || Math.abs(bounds.maxX - lastBounds.maxX) >= VIEWPORT_MOVE_THRESHOLD
+                || Math.abs(bounds.minY - lastBounds.minY) >= VIEWPORT_MOVE_THRESHOLD
+                || Math.abs(bounds.maxY - lastBounds.maxY) >= VIEWPORT_MOVE_THRESHOLD;
+
+            if (!changedEnough) return;
+        }
+
+        const key = `${bounds.minX}:${bounds.minY}:${bounds.maxX}:${bounds.maxY}`;
+        if (!immediate && lastFetchedViewportRef.current === key) return;
+
+        const run = async () => {
+            try {
+                // Mark immediately to avoid mount-time duplicate fetches while request is in flight.
+                lastFetchedViewportRef.current = key;
+                lastFetchedBoundsRef.current = bounds;
+                lastFetchCameraRef.current = { x: currentCamera.x, y: currentCamera.y, zoom: currentCamera.zoom };
+                await fetchViewportPixels(bounds);
+            } catch (error) {
+                console.error('Viewport fetch failed:', error);
+            }
+        };
+
+        if (viewportFetchTimerRef.current) {
+            clearTimeout(viewportFetchTimerRef.current);
+            viewportFetchTimerRef.current = null;
+        }
+
+        if (immediate) {
+            void run();
+            return;
+        }
+
+        viewportFetchTimerRef.current = setTimeout(() => {
+            viewportFetchTimerRef.current = null;
+            void run();
+        }, VIEWPORT_FETCH_DEBOUNCE_MS);
+    }, [fetchViewportPixels, getViewportBounds]);
+
     // --- Clamp camera to keep board visible ---
     // Extra margin on right/bottom so users can pan board out from under the mini-map
     const MINIMAP_SAFE_PX = 180; // slightly larger than mini-map (160 + spacing)
@@ -311,8 +390,9 @@ export default function PixelBoard() {
         if (canvasSize.w > 100 && canvasSize.h > 100 && !hasInitialized.current) {
             hasInitialized.current = true;
             fitToViewport();
+            queueViewportFetch(true);
         }
-    }, [canvasSize, fitToViewport]);
+    }, [canvasSize, fitToViewport, queueViewportFetch]);
 
 
     // --- Draw base board (grid + owned pixels + logos) ---
@@ -628,11 +708,22 @@ export default function PixelBoard() {
     const scheduleRedraw = useCallback(() => {
         if (redrawFrame.current) return;
         redrawFrame.current = requestAnimationFrame(() => {
+            const c = camera.current;
+            const moved =
+                c.x !== lastCameraRef.current.x
+                || c.y !== lastCameraRef.current.y
+                || c.zoom !== lastCameraRef.current.zoom;
+
+            if (moved) {
+                lastCameraRef.current = { x: c.x, y: c.y, zoom: c.zoom };
+                queueViewportFetch(false);
+            }
+
             redrawFrame.current = null;
             drawBaseBoard();
             drawOverlayBoard();
         });
-    }, [drawBaseBoard, drawOverlayBoard]);
+    }, [drawBaseBoard, drawOverlayBoard, queueViewportFetch]);
 
     useEffect(() => {
         requestRedrawRef.current = scheduleRedraw;
@@ -785,6 +876,7 @@ export default function PixelBoard() {
         return () => {
             if (zoomAnimFrame.current) cancelAnimationFrame(zoomAnimFrame.current);
             if (redrawFrame.current) cancelAnimationFrame(redrawFrame.current);
+            if (viewportFetchTimerRef.current) clearTimeout(viewportFetchTimerRef.current);
         };
     }, []);
 
@@ -1415,6 +1507,7 @@ export default function PixelBoard() {
             await queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
             await queryClient.invalidateQueries({ queryKey: ['buyers'] });
             await queryClient.invalidateQueries({ queryKey: ['auth'] });
+            queueViewportFetch(true);
 
             // Trigger purchase highlight animation (Feature 11)
             if (coords.length > 0) {
@@ -1435,7 +1528,7 @@ export default function PixelBoard() {
             setPurchaseError(errorMessage);
             setToastMessage(errorMessage);
             setTimeout(() => setToastMessage(null), 3000);
-            refetch();
+            queueViewportFetch(true);
         } finally {
             setIsProcessing(false);
         }
