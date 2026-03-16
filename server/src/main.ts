@@ -8,10 +8,14 @@ async function bootstrap() {
     const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
     app.enableCors({
-        origin: ['https://pixellion.vercel.app', 'http://localhost:5173'],
-        credentials: true,
+        origin: [
+            'https://pixellion.vercel.app',
+            'http://localhost:5173',
+            'http://localhost:5174',
+        ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: false,
     });
 
     app.use(
