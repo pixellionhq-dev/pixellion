@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../utils/supabase';
+import { apiClient } from '../api/client';
 import Button from './ui/Button';
 import Input from './ui/Input';
 
@@ -8,7 +9,7 @@ export default function AuthModal({ isOpen, onClose }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const { login } = useAuth();
+    const { login, reloadAuth } = useAuth();
     const [loading, setLoading] = useState(false);
     const [supabaseMode, setSupabaseMode] = useState('options'); // 'options' | 'email' | 'password'
     const [otpSent, setOtpSent] = useState(false);
@@ -70,15 +71,17 @@ export default function AuthModal({ isOpen, onClose }) {
             if (error) throw error;
             const accessToken = data.session?.access_token;
             if (!accessToken) throw new Error('No session after OTP verify');
-            const res = await fetch('/api/auth/supabase', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ supabase_token: accessToken }),
+            const { data: backendAuth } = await apiClient.post('/auth/supabase', {
+                supabase_token: accessToken,
             });
-            if (!res.ok) {
-                const body = await res.json().catch(() => ({}));
-                throw new Error(body.message || 'Backend auth failed');
+
+            if (!backendAuth?.token) {
+                throw new Error('Backend auth failed');
             }
+
+            localStorage.setItem('token', backendAuth.token);
+            window.dispatchEvent(new Event('auth:changed'));
+            await reloadAuth();
             onClose();
         } catch (err) {
             setError(err.message || 'Sign in failed');
@@ -93,6 +96,7 @@ export default function AuthModal({ isOpen, onClose }) {
         setLoading(true);
         try {
             await login({ email, password });
+            await reloadAuth();
             onClose();
         } catch (err) {
             setError(err.response?.data?.message || 'Authentication failed');

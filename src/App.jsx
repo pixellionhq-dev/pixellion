@@ -10,6 +10,7 @@ import BrandProfile from './components/BrandProfile';
 import Pulse from './components/Pulse';
 import { apiClient } from './api/client';
 import { supabase } from './utils/supabase';
+import { BOARD_WIDTH, BOARD_HEIGHT } from './constants/canvasConfig';
 
 export default function App() {
   const [pulseEvents, setPulseEvents] = useState([]);
@@ -29,18 +30,12 @@ export default function App() {
         if (existingToken) return; // already logged in, skip
 
         try {
-          const response = await fetch(
-            `${import.meta.env.VITE_API_URL || 'https://pixellion-ilos.onrender.com'}/auth/supabase`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ supabase_token: session.access_token })
-            }
-          );
-          const data = await response.json();
+          const { data } = await apiClient.post('/auth/supabase', {
+            supabase_token: session.access_token,
+          });
           if (data.token) {
             localStorage.setItem('token', data.token);
-            window.location.reload();
+            window.dispatchEvent(new Event('auth:changed'));
           }
         } catch (err) {
           console.error('Backend exchange failed:', err);
@@ -75,7 +70,14 @@ export default function App() {
 
     const pollPixels = async () => {
       try {
-        const res = await apiClient.get('/pixels');
+        const res = await apiClient.get('/pixels', {
+          params: {
+            minX: 0,
+            minY: 0,
+            maxX: BOARD_WIDTH - 1,
+            maxY: BOARD_HEIGHT - 1,
+          },
+        });
         const pixels = Array.isArray(res.data) ? res.data : [];
 
         const groups = new Map();

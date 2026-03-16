@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { BOARD_WIDTH, BOARD_HEIGHT } from '../constants/canvasConfig';
 
 export default function BrandProfile() {
     const { brandName } = useParams();
@@ -11,7 +12,14 @@ export default function BrandProfile() {
     const { data: pixels = [], isLoading } = useQuery({
         queryKey: ['pixels'],
         queryFn: async () => {
-            const res = await apiClient.get('/pixels');
+            const res = await apiClient.get('/pixels', {
+                params: {
+                    minX: 0,
+                    minY: 0,
+                    maxX: BOARD_WIDTH - 1,
+                    maxY: BOARD_HEIGHT - 1,
+                },
+            });
             return res.data;
         }
     });

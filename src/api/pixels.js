@@ -1,6 +1,17 @@
 import { apiClient } from './client';
 
 export const getPixels = async (params, options = {}) => {
+    const hasViewport =
+        params
+        && Number.isFinite(params.minX)
+        && Number.isFinite(params.minY)
+        && Number.isFinite(params.maxX)
+        && Number.isFinite(params.maxY);
+
+    if (!hasViewport) {
+        throw new Error('Viewport params required for /pixels request');
+    }
+
     const { data } = await apiClient.get('/pixels', {
         params,
         signal: options.signal,
