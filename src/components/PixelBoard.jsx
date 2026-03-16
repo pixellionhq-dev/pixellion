@@ -1589,7 +1589,7 @@ export default function PixelBoard() {
                 {/* Canvas viewport */}
                 <div
                     ref={containerRef}
-                    className={`bg-gray-100 rounded-2xl border border-gray-300 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden relative ${isLoading ? 'hidden' : 'block'}`}
+                    className="bg-gray-100 rounded-2xl border border-gray-300 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden relative"
                     style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}
                 >
                     <canvas

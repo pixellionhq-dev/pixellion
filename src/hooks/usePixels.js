@@ -6,9 +6,10 @@ export const usePixels = () => {
 
     const { data: pixels, isLoading, refetch } = useQuery({
         queryKey: ['pixels'],
-        queryFn: getPixels,
+        queryFn: () => getPixels({ minX: 0, minY: 0, maxX: 200, maxY: 200 }),
         initialData: [],
-        staleTime: 0,
+        staleTime: 30_000,
+        cacheTime: 5 * 60 * 1000,
         refetchOnWindowFocus: false,
     });
 
