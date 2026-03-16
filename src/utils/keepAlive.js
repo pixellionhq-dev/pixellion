@@ -1,6 +1,6 @@
 export function startKeepAlive() {
   const BACKEND_URL = import.meta.env.VITE_API_URL ||
-    'https://pixellion-ilos.onrender.com';
+    'https://seashell-app-f4kca.ondigitalocean.app';
 
   const ping = async () => {
     try {

@@ -55,26 +55,23 @@ export class BuyersService {
     }
 
     async getStats() {
-        const totalPixels = await this.prisma.pixel.count();
-        const totalBuyers = await this.prisma.buyer.count({
-            where: { pixels: { some: {} } },
-        });
-
-        const topBuyer = await this.prisma.buyer.findFirst({
-            include: { user: true, _count: { select: { pixels: true } } },
-            orderBy: { pixels: { _count: 'desc' } },
-        });
-
-        const newestBuyer = await this.prisma.buyer.findFirst({
-            where: { pixels: { some: {} } },
-            include: { user: true },
-            orderBy: { createdAt: 'desc' },
-        });
-
-        const mostExpensive = await this.prisma.purchase.findFirst({
-            orderBy: { totalPrice: 'desc' },
-            include: { buyer: { include: { user: true } } },
-        });
+        const [totalPixels, totalBuyers, topBuyer, newestBuyer, mostExpensive] = await Promise.all([
+            this.prisma.pixel.count(),
+            this.prisma.buyer.count({ where: { pixels: { some: {} } } }),
+            this.prisma.buyer.findFirst({
+                include: { user: true, _count: { select: { pixels: true } } },
+                orderBy: { pixels: { _count: 'desc' } },
+            }),
+            this.prisma.buyer.findFirst({
+                where: { pixels: { some: {} } },
+                include: { user: true },
+                orderBy: { createdAt: 'desc' },
+            }),
+            this.prisma.purchase.findFirst({
+                orderBy: { totalPrice: 'desc' },
+                include: { buyer: { include: { user: true } } },
+            }),
+        ]);
 
         return {
             totalPixelsSold: totalPixels,
