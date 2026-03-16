@@ -1,7 +1,10 @@
 import { apiClient } from './client';
 
-export const getPixels = async (params) => {
-    const { data } = await apiClient.get('/pixels', { params });
+export const getPixels = async (params, options = {}) => {
+    const { data } = await apiClient.get('/pixels', {
+        params,
+        signal: options.signal,
+    });
     return data;
 };
 
