@@ -7,23 +7,24 @@ export const useLeaderboard = () => {
         queryFn: getLeaderboard,
         initialData: [],
         staleTime: 60_000,
+        refetchOnWindowFocus: false,
     });
 };
-
 export const useDirectory = (search, country) => {
     return useQuery({
         queryKey: ['buyers', search, country],
         queryFn: () => getDirectory(search, country),
         initialData: [],
         staleTime: 60_000,
+        refetchOnWindowFocus: false,
     });
 };
-
 export const useStats = () => {
     return useQuery({
         queryKey: ['stats'],
         queryFn: getStats,
         initialData: null,
         staleTime: 60_000,
+        refetchOnWindowFocus: false,
     });
 };

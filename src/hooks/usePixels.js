@@ -3,7 +3,6 @@ import { getPixels, purchasePixels } from '../api/pixels';
 
 export const usePixels = () => {
     const queryClient = useQueryClient();
-
     const { data: pixels, isLoading, refetch } = useQuery({
         queryKey: ['pixels'],
         queryFn: () => getPixels(),
@@ -13,7 +12,6 @@ export const usePixels = () => {
         refetchOnWindowFocus: false,
         refetchOnMount: false,
     });
-
     const purchaseMutation = useMutation({
         mutationFn: ({ pixels, color, brandName, brandUrl, file, onUploadProgress, fitMode, imageWidth, imageHeight }) =>
             purchasePixels(pixels, color, brandName, brandUrl, file, onUploadProgress, fitMode, imageWidth, imageHeight),
@@ -25,7 +23,6 @@ export const usePixels = () => {
             queryClient.invalidateQueries({ queryKey: ['auth'] });
         },
     });
-
     return {
         pixels,
         isLoading,
