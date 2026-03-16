@@ -39,25 +39,30 @@ export class PixelsService {
             && Number.isFinite(viewport?.maxX)
             && Number.isFinite(viewport?.maxY);
 
-        const pixels = await this.prisma.pixel.findMany({
-            ...(hasViewport
-                ? {
-                    where: {
-                        x: {
-                            gte: viewport!.minX!,
-                            lte: viewport!.maxX!,
-                        },
-                        y: {
-                            gte: viewport!.minY!,
-                            lte: viewport!.maxY!,
-                        },
-                    },
-                }
-                : {}),
+        const queryArgs: any = {
             include: {
                 purchase: { select: { brandName: true, logoUrl: true, fitMode: true, imageWidth: true, imageHeight: true } }
             },
-        });
+        };
+
+        if (hasViewport) {
+            queryArgs.where = {
+                x: {
+                    gte: viewport!.minX!,
+                    lte: viewport!.maxX!,
+                },
+                y: {
+                    gte: viewport!.minY!,
+                    lte: viewport!.maxY!,
+                },
+            };
+            queryArgs.take = 5000;
+        } else {
+            queryArgs.take = 2000;
+        }
+
+        const pixels: any[] = await this.prisma.pixel.findMany(queryArgs);
+
         return pixels.map((p) => ({
             id: p.id,
             x: p.x,

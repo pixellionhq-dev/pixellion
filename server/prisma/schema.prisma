@@ -44,6 +44,7 @@ model Pixel {
   purchasedAt DateTime @default(now()) @map("purchased_at")
 
   @@unique([x, y])
+  @@index([x, y])
   @@index([ownerId])
   @@index([purchaseId])
   @@map("pixels")
