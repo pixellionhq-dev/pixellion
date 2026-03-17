@@ -12,18 +12,20 @@ const setAuthToken = (token) => {
 
 export const register = async (email, username, password) => {
     const { data } = await apiClient.post('/auth/register', { email, username, password });
-    if (data.token) {
-        setAuthToken(data.token);
+    const payload = data?.data ?? data;
+    if (payload?.token) {
+        setAuthToken(payload.token);
     }
-    return data;
+    return payload;
 };
 
 export const login = async (email, password) => {
     const { data } = await apiClient.post('/auth/login', { email, password });
-    if (data.token) {
-        setAuthToken(data.token);
+    const payload = data?.data ?? data;
+    if (payload?.token) {
+        setAuthToken(payload.token);
     }
-    return data;
+    return payload;
 };
 
 export const getMe = async () => {
@@ -33,7 +35,7 @@ export const getMe = async () => {
             Authorization: token ? `Bearer ${token}` : undefined,
         },
     });
-    return data;
+    return data?.data ?? data;
 };
 
 export const logout = () => {

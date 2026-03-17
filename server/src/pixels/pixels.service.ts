@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -27,55 +27,82 @@ function createR2Client(): S3Client | null {
 const r2Client = createR2Client();
 const R2_BUCKET = process.env.R2_BUCKET_NAME || '';
 const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || '').replace(/\/+$/, '');
+const VIEWPORT_CACHE_TTL_MS = 10_000;
+
+type Viewport = { minX: number; minY: number; maxX: number; maxY: number };
+type BrandSummary = {
+    brandId: string;
+    ownerId: string;
+    brandName: string;
+    logoUrl: string | null;
+    totalPixels: number;
+    rank: number;
+};
 
 @Injectable()
 export class PixelsService {
+    private viewportCache = new Map<string, { expiresAt: number; payload: { blocks: any[]; brands: BrandSummary[] } }>();
+
     constructor(private prisma: PrismaService) { }
 
-    async getAllOwned(viewport?: { minX?: number; minY?: number; maxX?: number; maxY?: number }) {
-        const hasViewport =
-            Number.isFinite(viewport?.minX)
-            && Number.isFinite(viewport?.minY)
-            && Number.isFinite(viewport?.maxX)
-            && Number.isFinite(viewport?.maxY);
-
-        const queryArgs: any = {
-            include: {
-                purchase: { select: { brandName: true, logoUrl: true, fitMode: true, imageWidth: true, imageHeight: true } }
-            },
-        };
-
-        if (hasViewport) {
-            queryArgs.where = {
-                x: {
-                    gte: viewport!.minX!,
-                    lte: viewport!.maxX!,
-                },
-                y: {
-                    gte: viewport!.minY!,
-                    lte: viewport!.maxY!,
-                },
-            };
-            queryArgs.take = 5000;
-        } else {
-            queryArgs.take = 2000;
+    async getViewportBlocks(viewport: Viewport) {
+        const cacheKey = `${viewport.minX}:${viewport.minY}:${viewport.maxX}:${viewport.maxY}`;
+        const now = Date.now();
+        const cached = this.viewportCache.get(cacheKey);
+        if (cached && cached.expiresAt > now) {
+            return cached.payload;
         }
 
-        const pixels: any[] = await this.prisma.pixel.findMany(queryArgs);
+        const candidateBlocks = await this.prisma.pixelBlock.findMany({
+            where: {
+                xStart: { lte: viewport.maxX },
+                yStart: { lte: viewport.maxY },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5000,
+        });
 
-        return pixels.map((p) => ({
-            id: p.id,
-            x: p.x,
-            y: p.y,
-            color: p.color,
-            ownerId: p.ownerId,
-            purchaseId: p.purchaseId,
-            ownerName: p.purchase?.brandName || 'Anonymous',
-            ownerLogo: p.purchase?.logoUrl,
-            fitMode: p.purchase?.fitMode,
-            imageWidth: p.purchase?.imageWidth,
-            imageHeight: p.purchase?.imageHeight,
-        }));
+        const blocks = candidateBlocks.filter((block) => {
+            const endX = block.xStart + block.width - 1;
+            const endY = block.yStart + block.height - 1;
+            return endX >= viewport.minX && endY >= viewport.minY;
+        });
+
+        const ownerIds = Array.from(new Set(blocks.map((b) => b.ownerId)));
+        const buyers = ownerIds.length
+            ? await this.prisma.buyer.findMany({ where: { id: { in: ownerIds } }, include: { user: true } })
+            : [];
+        const buyerMap = new Map(buyers.map((b) => [b.id, b]));
+
+        const blockIdsByBrand = new Map<string, BrandSummary>();
+        blocks.forEach((block) => {
+            const key = block.brandId;
+            const buyer = buyerMap.get(block.ownerId);
+            const totalPixels = block.width * block.height;
+            const existing = blockIdsByBrand.get(key);
+
+            if (!existing) {
+                blockIdsByBrand.set(key, {
+                    brandId: key,
+                    ownerId: block.ownerId,
+                    brandName: buyer?.user?.username || key || 'Anonymous',
+                    logoUrl: null,
+                    totalPixels,
+                    rank: 0,
+                });
+                return;
+            }
+
+            existing.totalPixels += totalPixels;
+        });
+
+        const brands = Array.from(blockIdsByBrand.values())
+            .sort((a, b) => b.totalPixels - a.totalPixels)
+            .map((brand, index) => ({ ...brand, rank: index + 1 }));
+
+        const payload = { blocks, brands };
+        this.viewportCache.set(cacheKey, { expiresAt: now + VIEWPORT_CACHE_TTL_MS, payload });
+        return payload;
     }
 
     /**
@@ -143,6 +170,12 @@ export class PixelsService {
         });
 
         const coords = pixels.map((p) => ({ x: Math.floor(p.x), y: Math.floor(p.y) }));
+        const minX = Math.min(...coords.map((p) => p.x));
+        const maxX = Math.max(...coords.map((p) => p.x));
+        const minY = Math.min(...coords.map((p) => p.y));
+        const maxY = Math.max(...coords.map((p) => p.y));
+        const blockWidth = maxX - minX + 1;
+        const blockHeight = maxY - minY + 1;
         const totalPrice = pixels.length * PIXEL_PRICE;
         const pixelColor = color || buyer.color;
 
@@ -162,24 +195,22 @@ export class PixelsService {
             },
         });
 
-        const pixelData = coords.map((c) => ({
-            x: c.x,
-            y: c.y,
-            ownerId: buyer.id,
-            purchaseId: purchase.id,
-            color: pixelColor,
-        }));
+        try {
+            await this.prisma.pixelBlock.create({
+                data: {
+                    brandId: brandName.trim(),
+                    ownerId: buyer.id,
+                    xStart: minX,
+                    yStart: minY,
+                    width: blockWidth,
+                    height: blockHeight,
+                },
+            });
+        } catch {
+            throw new HttpException({ message: 'Failed to save pixel block', code: 'PIXEL_BLOCK_CREATE_FAILED' }, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
 
-        setImmediate(async () => {
-            try {
-                for (let i = 0; i < pixelData.length; i += 100) {
-                    const batch = pixelData.slice(i, i + 100);
-                    await this.prisma.pixel.createMany({ data: batch, skipDuplicates: true });
-                }
-            } catch (error) {
-                console.error('Async pixel insert failed:', error);
-            }
-        });
+        this.viewportCache.clear();
 
         return {
             purchaseId: purchase.id,

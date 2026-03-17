@@ -11,6 +11,7 @@ import HeatmapOverlay from './HeatmapOverlay';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import { apiClient } from '../api/client';
+import usePixelViewport from '../store/usePixelViewport';
 import * as ImageCache from '../utils/imageCache';
 import {
     BOARD_WIDTH, BOARD_HEIGHT,
@@ -80,7 +81,8 @@ export default function PixelBoard() {
     const currentDragStart = useRef(null);
     const currentDragEnd = useRef(null);
 
-    const { pixels: ownedPixels, isLoading, purchase, refetch, fetchViewportPixels } = usePixels();
+    const { purchase } = usePixels();
+    const { blocks, brands, loading: isLoading, setViewport, refresh } = usePixelViewport();
     const { user } = useAuth();
     const [isProcessing, setIsProcessing] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
@@ -99,6 +101,43 @@ export default function PixelBoard() {
     const purchaseHighlight = useRef(null); // { bounds: {minX,minY,maxX,maxY}, startTime }
 
     // Fast lookup
+    const brandSummaryMap = useMemo(() => {
+        return new Map((brands || []).map((brand) => [brand.brandId, brand]));
+    }, [brands]);
+
+    const ownedPixels = useMemo(() => {
+        if (!Array.isArray(blocks) || blocks.length === 0) return [];
+
+        const expanded = [];
+        for (const block of blocks) {
+            const summary = brandSummaryMap.get(block.brandId);
+            const ownerName = summary?.brandName || block.brandId || 'Anonymous';
+            const blockArea = block.width * block.height;
+
+            for (let y = block.yStart; y < block.yStart + block.height; y++) {
+                for (let x = block.xStart; x < block.xStart + block.width; x++) {
+                    expanded.push({
+                        id: `${block.id}:${x}:${y}`,
+                        x,
+                        y,
+                        color: '#0a0a0a',
+                        ownerId: block.ownerId,
+                        purchaseId: block.id,
+                        brandId: block.brandId,
+                        ownerName,
+                        ownerLogo: summary?.logoUrl || null,
+                        logoUrl: summary?.logoUrl || null,
+                        ownerPixelCount: summary?.totalPixels || blockArea,
+                        ownerRank: summary?.rank || '-',
+                        blockArea,
+                    });
+                }
+            }
+        }
+
+        return expanded;
+    }, [blocks, brandSummaryMap]);
+
     const ownedMap = useMemo(() => {
         const map = new Map();
         if (ownedPixels) {
@@ -302,15 +341,11 @@ export default function PixelBoard() {
         if (!immediate && lastFetchedViewportRef.current === key) return;
 
         const run = async () => {
-            try {
-                // Mark immediately to avoid mount-time duplicate fetches while request is in flight.
-                lastFetchedViewportRef.current = key;
-                lastFetchedBoundsRef.current = bounds;
-                lastFetchCameraRef.current = { x: currentCamera.x, y: currentCamera.y, zoom: currentCamera.zoom };
-                await fetchViewportPixels(bounds);
-            } catch (error) {
-                console.error('Viewport fetch failed:', error);
-            }
+            // Mark immediately to avoid mount-time duplicate fetches while request is in flight.
+            lastFetchedViewportRef.current = key;
+            lastFetchedBoundsRef.current = bounds;
+            lastFetchCameraRef.current = { x: currentCamera.x, y: currentCamera.y, zoom: currentCamera.zoom };
+            setViewport(bounds);
         };
 
         if (viewportFetchTimerRef.current) {
@@ -327,7 +362,7 @@ export default function PixelBoard() {
             viewportFetchTimerRef.current = null;
             void run();
         }, VIEWPORT_FETCH_DEBOUNCE_MS);
-    }, [fetchViewportPixels, getViewportBounds]);
+    }, [setViewport, getViewportBounds]);
 
     // --- Clamp camera to keep board visible ---
     // Extra margin on right/bottom so users can pan board out from under the mini-map
@@ -390,7 +425,7 @@ export default function PixelBoard() {
         if (canvasSize.w > 100 && canvasSize.h > 100 && !hasInitialized.current) {
             hasInitialized.current = true;
             fitToViewport();
-            queueViewportFetch(true);
+            refresh();
         }
     }, [canvasSize, fitToViewport, queueViewportFetch]);
 
@@ -1507,7 +1542,7 @@ export default function PixelBoard() {
             await queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
             await queryClient.invalidateQueries({ queryKey: ['buyers'] });
             await queryClient.invalidateQueries({ queryKey: ['auth'] });
-            queueViewportFetch(true);
+            refresh();
 
             // Trigger purchase highlight animation (Feature 11)
             if (coords.length > 0) {
@@ -1765,6 +1800,7 @@ export default function PixelBoard() {
                                 <div className="space-y-0.5 mb-2">
                                     <p className="text-xs text-gray-500">Pixels owned: <span className="font-semibold text-gray-700">{hoveredPixel.ownerPixelCount || 1}</span></p>
                                     <p className="text-xs text-gray-500">Rank: <span className="font-semibold text-gray-700">#{hoveredPixel.ownerRank || '-'}</span></p>
+                                    <p className="text-xs text-gray-500">Block area: <span className="font-semibold text-gray-700">{hoveredPixel.blockArea || 1}</span></p>
                                     <p className="text-xs text-gray-500">Position: <span className="font-mono text-gray-700">{hoveredPixel.x}, {hoveredPixel.y}</span></p>
                                 </div>
                                 <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">

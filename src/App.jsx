@@ -10,12 +10,14 @@ import BrandProfile from './components/BrandProfile';
 import Pulse from './components/Pulse';
 import { apiClient } from './api/client';
 import { supabase } from './utils/supabase';
+import usePixelViewport from './store/usePixelViewport';
 import { BOARD_WIDTH, BOARD_HEIGHT } from './constants/canvasConfig';
 
 export default function App() {
   const [pulseEvents, setPulseEvents] = useState([]);
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
+  const { blocks, setViewport, refresh } = usePixelViewport();
 
   useEffect(() => {
     // Handle OAuth redirect callback
@@ -33,8 +35,9 @@ export default function App() {
           const { data } = await apiClient.post('/auth/supabase', {
             supabase_token: session.access_token,
           });
-          if (data.token) {
-            localStorage.setItem('token', data.token);
+          const payload = data?.data ?? data;
+          if (payload?.token) {
+            localStorage.setItem('token', payload.token);
             window.dispatchEvent(new Event('auth:changed'));
           }
         } catch (err) {
@@ -66,72 +69,39 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-
-    const pollPixels = async () => {
-      try {
-        const res = await apiClient.get('/pixels', {
-          params: {
-            minX: 0,
-            minY: 0,
-            maxX: BOARD_WIDTH - 1,
-            maxY: BOARD_HEIGHT - 1,
-          },
-        });
-        const pixels = Array.isArray(res.data) ? res.data : [];
-
-        const groups = new Map();
-        pixels.forEach((p) => {
-          const purchaseId = p.purchaseId;
-          if (!purchaseId) return;
-          const existing = groups.get(purchaseId);
-          if (!existing) {
-            groups.set(purchaseId, {
-              id: purchaseId,
-              brand: p.ownerName || 'Unknown Brand',
-              pixels: 1,
-              color: p.color || '#2563eb'
-            });
-          } else {
-            existing.pixels += 1;
-          }
-        });
-
-        const purchases = Array.from(groups.values());
-
-        if (!hasPrimedPurchases.current) {
-          purchases.forEach((p) => knownPurchaseIds.current.add(p.id));
-          hasPrimedPurchases.current = true;
-          return;
-        }
-
-        const newPurchases = purchases.filter((p) => !knownPurchaseIds.current.has(p.id));
-        newPurchases.forEach((p) => knownPurchaseIds.current.add(p.id));
-
-        if (newPurchases.length > 0 && mounted) {
-          const createdEvents = newPurchases.map((p) => ({
-            id: `${p.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            brand: p.brand,
-            pixels: p.pixels,
-            color: p.color,
-            time: Date.now()
-          }));
-
-          setPulseEvents((prev) => [...prev, ...createdEvents].slice(-10));
-        }
-      } catch {
-        // Keep polling quietly.
-      }
-    };
-
-    pollPixels();
-    const intervalId = setInterval(pollPixels, 30_000);
-
-    return () => {
-      mounted = false;
-      clearInterval(intervalId);
-    };
+    setViewport({ minX: 0, minY: 0, maxX: BOARD_WIDTH - 1, maxY: BOARD_HEIGHT - 1 });
+    const intervalId = setInterval(() => refresh(), 30_000);
+    return () => clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    const purchases = (blocks || []).map((block) => ({
+      id: block.id,
+      brand: block.brandId || 'Unknown Brand',
+      pixels: block.width * block.height,
+      color: '#2563eb',
+    }));
+
+    if (!hasPrimedPurchases.current) {
+      purchases.forEach((p) => knownPurchaseIds.current.add(p.id));
+      hasPrimedPurchases.current = true;
+      return;
+    }
+
+    const newPurchases = purchases.filter((p) => !knownPurchaseIds.current.has(p.id));
+    newPurchases.forEach((p) => knownPurchaseIds.current.add(p.id));
+
+    if (newPurchases.length > 0) {
+      const createdEvents = newPurchases.map((p) => ({
+        id: `${p.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        brand: p.brand,
+        pixels: p.pixels,
+        color: p.color,
+        time: Date.now(),
+      }));
+      setPulseEvents((prev) => [...prev, ...createdEvents].slice(-10));
+    }
+  }, [blocks]);
 
   return (
     <div className="min-h-screen bg-[var(--color-surface)]">

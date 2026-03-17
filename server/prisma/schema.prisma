@@ -27,9 +27,26 @@ model Buyer {
   user      User       @relation(fields: [userId], references: [id])
   createdAt DateTime   @default(now()) @map("created_at")
   pixels    Pixel[]
+  blocks    PixelBlock[]
   purchases Purchase[]
 
   @@map("buyers")
+}
+
+model PixelBlock {
+  id        String   @id @default(uuid())
+  brandId   String   @map("brand_id")
+  ownerId   String   @map("owner_id")
+  owner     Buyer    @relation(fields: [ownerId], references: [id])
+  xStart    Int      @map("x_start")
+  yStart    Int      @map("y_start")
+  width     Int
+  height    Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@index([xStart, yStart])
+  @@map("pixel_blocks")
 }
 
 model Pixel {

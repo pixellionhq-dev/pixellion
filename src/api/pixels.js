@@ -16,7 +16,7 @@ export const getPixels = async (params, options = {}) => {
         params,
         signal: options.signal,
     });
-    return data;
+    return data?.data ?? data;
 };
 
 export const purchasePixels = async (pixels, color, brandName, brandUrl, file, onUploadProgress, fitMode, imageWidth, imageHeight) => {
@@ -35,5 +35,5 @@ export const purchasePixels = async (pixels, color, brandName, brandUrl, file, o
         onUploadProgress,
         timeout: 30_000,
     });
-    return data;
+    return data?.data ?? data;
 };

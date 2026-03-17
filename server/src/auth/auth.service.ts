@@ -1,7 +1,8 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, HttpException, HttpStatus } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 @Injectable()
 export class AuthService {
@@ -75,7 +76,7 @@ export class AuthService {
     async getProfile(userId: string) {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
-            include: { buyer: { include: { _count: { select: { pixels: true } } } } },
+            include: { buyer: { include: { _count: { select: { blocks: true } } } } },
         });
         if (!user) throw new UnauthorizedException();
 
@@ -89,7 +90,7 @@ export class AuthService {
                     color: user.buyer.color,
                     country: user.buyer.country,
                     flag: user.buyer.flag,
-                    pixelCount: user.buyer._count.pixels,
+                    pixelCount: user.buyer._count.blocks,
                 }
                 : null,
         };
@@ -103,30 +104,41 @@ export class AuthService {
         return colors[Math.floor(Math.random() * colors.length)];
     }
     async supabaseLogin(supabase_token: string) {
-        console.log('SUPABASE_URL:', process.env.SUPABASE_URL ? 'set' : 'MISSING');
-        console.log('SERVICE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'set' : 'MISSING');
-        const { createClient } = await import('@supabase/supabase-js');
         const supabaseUrl = process.env.SUPABASE_URL;
-        const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        if (!supabaseUrl || !supabaseServiceRoleKey) {
-            throw new UnauthorizedException('Supabase env vars missing');
+        if (!supabaseUrl) {
+            throw new HttpException({ message: 'Supabase URL missing', code: 'SUPABASE_URL_MISSING' }, HttpStatus.UNAUTHORIZED);
         }
-        const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-        // Validate token and get user
-        const { data, error } = await supabase.auth.getUser(supabase_token);
-        if (error || !data?.user) {
-            console.log('Supabase getUser error:', error?.message);
-            throw new UnauthorizedException('Invalid Supabase token');
+
+        const jwks = createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`));
+        const expectedAud = process.env.SUPABASE_JWT_AUD || 'authenticated';
+
+        let payload: any;
+        try {
+            const verified = await jwtVerify(supabase_token, jwks, {
+                audience: expectedAud,
+                issuer: `${supabaseUrl}/auth/v1`,
+            });
+            payload = verified.payload;
+        } catch {
+            throw new HttpException({ message: 'Invalid Supabase token', code: 'SUPABASE_TOKEN_INVALID' }, HttpStatus.UNAUTHORIZED);
         }
-        const email = data.user.email;
-        if (!email) {
-            throw new UnauthorizedException('No email found in Supabase user');
+
+        const email = typeof payload.email === 'string' ? payload.email : '';
+        const emailVerified = payload.email_verified === true || payload.email_confirmed_at;
+        if (!email || !emailVerified) {
+            throw new HttpException({ message: 'Email not verified', code: 'SUPABASE_EMAIL_NOT_VERIFIED' }, HttpStatus.UNAUTHORIZED);
         }
-        // Check if user exists
+
+        const providerId = typeof payload.sub === 'string' ? payload.sub : '';
+        if (!providerId) {
+            throw new HttpException({ message: 'Invalid provider identity', code: 'SUPABASE_PROVIDER_INVALID' }, HttpStatus.UNAUTHORIZED);
+        }
+
         let user = await this.prisma.user.findUnique({ where: { email }, include: { buyer: true } });
         if (!user) {
             // Create user and buyer
-            const username = email.split('@')[0];
+            const providerSuffix = providerId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toLowerCase();
+            const username = `${email.split('@')[0]}${providerSuffix ? `_${providerSuffix}` : ''}`;
             const { user: newUser, buyer } = await this.prisma.$transaction(async (tx) => {
                 const newUser = await tx.user.create({ data: { email, username, passwordHash: '' } });
                 const buyer = await tx.buyer.create({

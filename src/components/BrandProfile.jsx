@@ -1,50 +1,36 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../api/client';
+import usePixelViewport from '../store/usePixelViewport';
 import { BOARD_WIDTH, BOARD_HEIGHT } from '../constants/canvasConfig';
 
 export default function BrandProfile() {
     const { brandName } = useParams();
     const [brandData, setBrandData] = useState(null);
-
-    // Fetch all pixels to aggregate profile data (simulating a dedicated profile endpoint for now)
-    const { data: pixels = [], isLoading } = useQuery({
-        queryKey: ['pixels'],
-        queryFn: async () => {
-            const res = await apiClient.get('/pixels', {
-                params: {
-                    minX: 0,
-                    minY: 0,
-                    maxX: BOARD_WIDTH - 1,
-                    maxY: BOARD_HEIGHT - 1,
-                },
-            });
-            return res.data;
-        }
-    });
+    const { blocks, loading: isLoading, setViewport } = usePixelViewport();
 
     useEffect(() => {
-        if (pixels.length > 0 && brandName) {
+        setViewport({ minX: 0, minY: 0, maxX: BOARD_WIDTH - 1, maxY: BOARD_HEIGHT - 1 });
+    }, []);
+
+    useEffect(() => {
+        if ((blocks || []).length > 0 && brandName) {
             const decodedName = decodeURIComponent(brandName);
-            const ownedByBrand = pixels.filter(p => p.ownerName === decodedName);
+            const ownedByBrand = (blocks || []).filter((block) => block.brandId === decodedName);
 
             if (ownedByBrand.length > 0) {
-                // Determine logo (prefer first valid uploaded logo, fallback to URL)
-                const logo = ownedByBrand.find(p => p.ownerLogo)?.ownerLogo || ownedByBrand.find(p => p.logoUrl)?.logoUrl;
-                const url = ownedByBrand.find(p => p.ownerUrl)?.ownerUrl;
+                const totalPixels = ownedByBrand.reduce((sum, block) => sum + (block.width * block.height), 0);
 
                 setBrandData({
                     name: decodedName,
-                    pixelCount: ownedByBrand.length,
-                    logo: logo ? (logo.startsWith('http') ? logo : `http://localhost:3001/uploads/${logo.split('/').pop()}`) : null,
-                    url: url,
-                    rank: ownedByBrand[0].ownerRank || '-', // Note: Rank might need a real leaderboard calc
+                    pixelCount: totalPixels,
+                    logo: null,
+                    url: null,
+                    rank: '-',
                     joinedDate: new Date(ownedByBrand[0].createdAt || Date.now()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
                 });
             }
         }
-    }, [pixels, brandName]);
+    }, [blocks, brandName]);
 
     if (isLoading) {
         return (

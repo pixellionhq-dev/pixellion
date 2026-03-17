@@ -74,12 +74,13 @@ export default function AuthModal({ isOpen, onClose }) {
             const { data: backendAuth } = await apiClient.post('/auth/supabase', {
                 supabase_token: accessToken,
             });
+            const payload = backendAuth?.data ?? backendAuth;
 
-            if (!backendAuth?.token) {
+            if (!payload?.token) {
                 throw new Error('Backend auth failed');
             }
 
-            localStorage.setItem('token', backendAuth.token);
+            localStorage.setItem('token', payload.token);
             window.dispatchEvent(new Event('auth:changed'));
             await reloadAuth();
             onClose();
