@@ -76,7 +76,7 @@ export class BuyersService {
         return {
             totalPixelsSold: totalPixels,
             totalBuyers,
-            currentPixelPrice: parseFloat(process.env.PIXEL_PRICE || '100'),
+            currentPixelPrice: parseFloat(process.env.PIXEL_PRICE || '100') || 100,
             mostExpensivePixel: mostExpensive
                 ? { price: mostExpensive.totalPrice, owner: mostExpensive.buyer.user?.username || 'Anonymous' }
                 : { price: 0, owner: 'N/A' },

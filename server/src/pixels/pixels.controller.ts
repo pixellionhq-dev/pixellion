@@ -14,8 +14,8 @@ export class PixelsController {
         @Query('maxX') maxX?: string,
         @Query('maxY') maxY?: string,
     ) {
-        if ([minX, minY, maxX, maxY].some(v => v === undefined || v === null || v === '')) {
-            throw new BadRequestException('Viewport params required');
+        if ([minX, minY, maxX, maxY].every(v => v === undefined || v === null || v === '')) {
+            return this.pixelsService.getAllOwned();
         }
 
         const parse = (value?: string) => {
@@ -30,14 +30,14 @@ export class PixelsController {
         const parsedMaxY = parse(maxY);
 
         if ([parsedMinX, parsedMinY, parsedMaxX, parsedMaxY].some(v => v === undefined)) {
-            throw new BadRequestException('Viewport params required');
+            throw new BadRequestException('All four viewport params are required if any is provided');
         }
 
         return this.pixelsService.getAllOwned({
-            minX: parsedMinX,
-            minY: parsedMinY,
-            maxX: parsedMaxX,
-            maxY: parsedMaxY,
+            minX: parsedMinX!,
+            minY: parsedMinY!,
+            maxX: parsedMaxX!,
+            maxY: parsedMaxY!,
         });
     }
 
