@@ -33,10 +33,10 @@ export class PixelsController {
       throw new BadRequestException('Viewport params required');
     }
 
-    const parsedMinX = parseInt(minX, 10);
-    const parsedMinY = parseInt(minY, 10);
-    const parsedMaxX = parseInt(maxX, 10);
-    const parsedMaxY = parseInt(maxY, 10);
+    const parsedMinX = parseInt(minX!, 10);
+    const parsedMinY = parseInt(minY!, 10);
+    const parsedMaxX = parseInt(maxX!, 10);
+    const parsedMaxY = parseInt(maxY!, 10);
 
     if ([parsedMinX, parsedMinY, parsedMaxX, parsedMaxY].some(v => Number.isNaN(v))) {
       throw new BadRequestException('Invalid viewport values');

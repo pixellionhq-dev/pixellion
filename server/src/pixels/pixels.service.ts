@@ -87,7 +87,7 @@ export class PixelsService {
     const purchase = await this.prisma.purchase.create({
       data: {
         buyerId: buyer.id,
-        brandName,
+        brandName: brandName ?? '',
         url: brandUrl,
         logoUrl,
         pixelCount: pixels.length,
