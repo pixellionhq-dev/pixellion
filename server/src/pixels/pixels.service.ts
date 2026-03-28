@@ -1,81 +1,100 @@
 import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  UseGuards,
-  Request,
-  UseInterceptors,
-  UploadedFile,
+  Injectable,
   BadRequestException,
-  Query,
+  InternalServerErrorException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { Throttle } from '@nestjs/throttler';
-import { PixelsService } from './pixels.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Public } from '../auth/public.decorator';
+import { PrismaService } from '../prisma/prisma.service';
+import { extname } from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-@Controller('pixels')
-export class PixelsController {
-  constructor(private pixelsService: PixelsService) {}
+const PIXEL_PRICE = parseFloat(process.env.PIXEL_PRICE || '100');
 
-  @Public()
-  @Throttle({ default: { limit: 60, ttl: 60_000 } })
-  @Get()
-  async getAll(
-    @Query('minX') minX?: string,
-    @Query('minY') minY?: string,
-    @Query('maxX') maxX?: string,
-    @Query('maxY') maxY?: string,
-  ) {
-    if ([minX, minY, maxX, maxY].some(v => !v)) {
-      throw new BadRequestException('Viewport params required');
-    }
+function createR2Client(): S3Client | null {
+  const endpoint = process.env.R2_ENDPOINT;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  const bucket = process.env.R2_BUCKET_NAME;
 
-    return this.pixelsService.getViewportBlocks({
-      minX: parseInt(minX!, 10),
-      minY: parseInt(minY!, 10),
-      maxX: parseInt(maxX!, 10),
-      maxY: parseInt(maxY!, 10),
+  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket) {
+    return null;
+  }
+
+  return new S3Client({
+    region: 'auto',
+    endpoint,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+}
+
+const r2Client = createR2Client();
+const R2_BUCKET = process.env.R2_BUCKET_NAME || '';
+const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || '').replace(/\/+$/, '');
+
+type Viewport = { minX: number; minY: number; maxX: number; maxY: number };
+
+@Injectable()
+export class PixelsService {
+  constructor(private prisma: PrismaService) {}
+
+  async getViewportBlocks(viewport: Viewport) {
+    return this.prisma.pixelBlock.findMany({
+      where: {
+        xStart: { lte: viewport.maxX },
+        yStart: { lte: viewport.maxY },
+      },
+      take: 1000,
     });
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Post('purchase')
-  @UseInterceptors(FileInterceptor('file', {
-    limits: {
-      fileSize: 512 * 1024,
-      fieldSize: 10 * 1024 * 1024,
-      fields: 20,
-    },
-    fileFilter: (req, file, cb) => {
-      if (file.mimetype.match(/\/(jpg|jpeg|png|svg\+xml)$/)) cb(null, true);
-      else cb(new BadRequestException('Unsupported file type'), false);
-    }
-  }))
   async purchase(
-    @Request() req,
-    @UploadedFile() file: Express.Multer.File,
-    @Body() body: any,
+    userId: string,
+    pixels: { x: number; y: number }[],
+    color?: string,
+    brandName?: string,
+    brandUrl?: string,
+    file?: Express.Multer.File,
+    fitMode?: string,
+    imageWidth?: number,
+    imageHeight?: number
   ) {
-    let pixels;
-    try {
-      pixels = typeof body.pixels === 'string' ? JSON.parse(body.pixels) : body.pixels;
-    } catch {
-      throw new BadRequestException('Invalid pixels payload');
+    if (!pixels.length) throw new BadRequestException('No pixels');
+
+    let logoUrl: string | undefined;
+
+    if (file && r2Client) {
+      const filename = `${uuidv4()}${extname(file.originalname)}`;
+
+      await r2Client.send(
+        new PutObjectCommand({
+          Bucket: R2_BUCKET,
+          Key: `logos/${filename}`,
+          Body: file.buffer,
+        })
+      );
+
+      logoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
     }
 
-    return this.pixelsService.purchase(
-      req.user.sub,
-      pixels,
-      body.color,
-      body.brandName,
-      body.brandUrl,
-      file,
-      body.fitMode,
-      body.imageWidth ? parseInt(body.imageWidth, 10) : undefined,
-      body.imageHeight ? parseInt(body.imageHeight, 10) : undefined
-    );
+    const buyer = await this.prisma.buyer.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+
+    const purchase = await this.prisma.purchase.create({
+      data: {
+        buyerId: buyer.id,
+        brandName,
+        url: brandUrl,
+        logoUrl,
+        pixelCount: pixels.length,
+        totalPrice: pixels.length * PIXEL_PRICE,
+      },
+    });
+
+    return purchase;
   }
 }
