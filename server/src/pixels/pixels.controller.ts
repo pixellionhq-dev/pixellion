@@ -22,7 +22,7 @@ export class PixelsController {
         @Query('maxY') maxY?: string,
     ) {
         if ([minX, minY, maxX, maxY].some(v => v === undefined || v === null || v === '')) {
-            throw new HttpException({ message: 'Viewport params required', code: 'VIEWPORT_PARAMS_REQUIRED' }, HttpStatus.BAD_REQUEST);
+            throw new BadRequestException('Viewport params required');
         }
 
         const parse = (value?: string) => {
@@ -37,28 +37,14 @@ export class PixelsController {
         const parsedMaxY = parse(maxY);
 
         if ([parsedMinX, parsedMinY, parsedMaxX, parsedMaxY].some(v => v === undefined)) {
-            throw new HttpException({ message: 'Viewport params required', code: 'VIEWPORT_PARAMS_REQUIRED' }, HttpStatus.BAD_REQUEST);
+            throw new BadRequestException('Viewport params required');
         }
 
-        const clampedMinX = Math.max(0, Math.min(parsedMinX!, BOARD_WIDTH - 1));
-        const clampedMinY = Math.max(0, Math.min(parsedMinY!, BOARD_HEIGHT - 1));
-        const clampedMaxX = Math.max(0, Math.min(parsedMaxX!, BOARD_WIDTH - 1));
-        const clampedMaxY = Math.max(0, Math.min(parsedMaxY!, BOARD_HEIGHT - 1));
-
-        if (clampedMinX > clampedMaxX || clampedMinY > clampedMaxY) {
-            throw new HttpException({ message: 'Invalid viewport bounds', code: 'INVALID_VIEWPORT_BOUNDS' }, HttpStatus.BAD_REQUEST);
-        }
-
-        const area = (clampedMaxX - clampedMinX + 1) * (clampedMaxY - clampedMinY + 1);
-        if (area > 100_000) {
-            throw new HttpException({ message: 'Viewport too large', code: 'VIEWPORT_TOO_LARGE' }, HttpStatus.BAD_REQUEST);
-        }
-
-        return this.pixelsService.getViewportBlocks({
-            minX: clampedMinX,
-            minY: clampedMinY,
-            maxX: clampedMaxX,
-            maxY: clampedMaxY,
+        return this.pixelsService.getAllOwned({
+            minX: parsedMinX,
+            minY: parsedMinY,
+            maxX: parsedMaxX,
+            maxY: parsedMaxY,
         });
     }
 

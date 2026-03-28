@@ -3,9 +3,11 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import * as express from 'express';
 import { join } from 'path';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 async function bootstrap() {
     const app = await NestFactory.create<NestExpressApplication>(AppModule);
+    app.useGlobalFilters(new GlobalExceptionFilter());
 
     app.enableCors({
         origin: [
