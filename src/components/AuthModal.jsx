@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import Button from './ui/Button';
 import Input from './ui/Input';
+import { apiClient } from '../api/client';
 
 export default function AuthModal({ isOpen, onClose }) {
     const [email, setEmail] = useState('');
@@ -12,15 +13,36 @@ export default function AuthModal({ isOpen, onClose }) {
 
     if (!isOpen) return null;
 
-    const handlePasswordLogin = async (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
-        setError('');
-        setLoading(true);
+
         try {
-            await login({ email, password });
-            await reloadAuth();
-            onClose();
+            console.log("LOGIN CLICKED");
+
+            const response = await apiClient.post("/auth/login", {
+                email,
+                password,
+            });
+
+            console.log("LOGIN RESPONSE:", response.data);
+
+            const token = response.data.access_token || response.data.token;
+
+            if (!token) {
+                console.error("No token received");
+                return;
+            }
+
+            localStorage.setItem("token", token);
+
+            console.log("TOKEN SAVED:", token);
+
+            // OPTIONAL: fetch user
+            await apiClient.get("/auth/me");
+
+            onClose(); // Added just to close the modal for UX
         } catch (err) {
+            console.error("LOGIN ERROR:", err);
             setError(err.response?.data?.message || 'Authentication failed');
         } finally {
             setLoading(false);
@@ -47,7 +69,7 @@ export default function AuthModal({ isOpen, onClose }) {
                     Enter your credentials to continue
                 </p>
 
-                <form onSubmit={handlePasswordLogin} className="space-y-3">
+                <form onSubmit={handleLogin} className="space-y-3">
                     <Input
                         type="email"
                         autoFocus
