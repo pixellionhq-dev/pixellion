@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { PixelsModule } from './pixels/pixels.module';
 import { BuyersModule } from './buyers/buyers.module';
+import { StatsModule } from './stats/stats.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { SuccessResponseInterceptor } from './common/success-response.interceptor';
 import { HttpExceptionFilter } from './common/http-exception.filter';
@@ -22,6 +23,7 @@ import { HttpExceptionFilter } from './common/http-exception.filter';
         AuthModule,
         PixelsModule,
         BuyersModule,
+        StatsModule,
     ],
     providers: [
         { provide: APP_GUARD, useClass: ThrottlerGuard },
