@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException, HttpException, Ht
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createClient } from '@supabase/supabase-js';
 
 @Injectable()
 export class AuthService {
@@ -141,40 +141,31 @@ export class AuthService {
         ];
         return colors[Math.floor(Math.random() * colors.length)];
     }
-    async supabaseLogin(supabase_token: string) {
-        const supabaseUrl = process.env.SUPABASE_URL;
-        if (!supabaseUrl) {
-            throw new HttpException({ message: 'Supabase URL missing', code: 'SUPABASE_URL_MISSING' }, HttpStatus.UNAUTHORIZED);
+    async supabaseLogin(access_token: string) {
+        const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            throw new HttpException({ message: 'Supabase admin credentials missing', code: 'SUPABASE_ADMIN_MISSING' }, HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
-        const jwks = createRemoteJWKSet(new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`));
-        const expectedAud = process.env.SUPABASE_JWT_AUD || 'authenticated';
+        const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
-        let payload: any;
-        try {
-            const verified = await jwtVerify(supabase_token, jwks, {
-                audience: expectedAud,
-                issuer: `${supabaseUrl}/auth/v1`,
-            });
-            payload = verified.payload;
-        } catch {
-            throw new HttpException({ message: 'Invalid Supabase token', code: 'SUPABASE_TOKEN_INVALID' }, HttpStatus.UNAUTHORIZED);
+        const { data, error } = await supabaseAdmin.auth.getUser(access_token);
+
+        if (error || !data?.user) {
+            throw new UnauthorizedException('Invalid Supabase access token');
         }
 
-        const email = typeof payload.email === 'string' ? payload.email : '';
-        const emailVerified = payload.email_verified === true || payload.email_confirmed_at;
-        if (!email || !emailVerified) {
-            throw new HttpException({ message: 'Email not verified', code: 'SUPABASE_EMAIL_NOT_VERIFIED' }, HttpStatus.UNAUTHORIZED);
+        const email = typeof data.user.email === 'string' ? data.user.email : '';
+        if (!email) {
+            throw new UnauthorizedException('No email found in Supabase user');
         }
 
-        const providerId = typeof payload.sub === 'string' ? payload.sub : '';
-        if (!providerId) {
-            throw new HttpException({ message: 'Invalid provider identity', code: 'SUPABASE_PROVIDER_INVALID' }, HttpStatus.UNAUTHORIZED);
-        }
+        const providerId = data.user.id;
 
         let user = await this.prisma.user.findUnique({ where: { email }, include: { buyer: true } });
         if (!user) {
-            // Create user and buyer
             const providerSuffix = providerId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toLowerCase();
             const username = `${email.split('@')[0]}${providerSuffix ? `_${providerSuffix}` : ''}`;
             const { user: newUser, buyer } = await this.prisma.$transaction(async (tx) => {
@@ -191,7 +182,7 @@ export class AuthService {
             });
             user = { ...newUser, buyer };
         }
-        // Issue JWT
+        
         const token = this.jwtService.sign({ sub: user.id, email: user.email });
         return {
             token,

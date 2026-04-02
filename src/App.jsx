@@ -26,7 +26,7 @@ export default function App() {
       if (data?.session) {
         const token = data.session.access_token
         try {
-          const res = await apiClient.post("/auth/supabase", { supabase_token: token }, {
+          const res = await apiClient.post("/auth/supabase", { access_token: token }, {
             headers: { Authorization: `Bearer ${token}` }
           })
           localStorage.setItem("token", res.data.access_token || res.data.token)
@@ -46,7 +46,7 @@ export default function App() {
           const token = session.access_token
           
           try {
-            const res = await apiClient.post("/auth/supabase", { supabase_token: token }, {
+            const res = await apiClient.post("/auth/supabase", { access_token: token }, {
               headers: { Authorization: `Bearer ${token}` }
             })
             localStorage.setItem("token", res.data.access_token || res.data.token)
