@@ -2,13 +2,7 @@ export function startKeepAlive() {
   const BACKEND_URL = import.meta.env.VITE_API_URL ||
     'https://seashell-app-f4kca.ondigitalocean.app';
 
-  const ping = async () => {
-    try {
-      await fetch(`${BACKEND_URL}/pixels`);
-    } catch (e) {
-      // silent fail
-    }
-  };
+  const ping = async () => {};
 
   const warmStats = async () => {
     try {

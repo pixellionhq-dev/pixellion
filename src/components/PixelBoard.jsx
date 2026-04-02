@@ -425,7 +425,6 @@ export default function PixelBoard() {
         if (canvasSize.w > 100 && canvasSize.h > 100 && !hasInitialized.current) {
             hasInitialized.current = true;
             fitToViewport();
-            refresh();
         }
     }, [canvasSize, fitToViewport, queueViewportFetch]);
 
