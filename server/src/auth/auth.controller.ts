@@ -15,6 +15,13 @@ export class AuthController {
     }
 
     @Public()
+    @Post('signup')
+    async signup(@Body() body: { email: string; password: string }) {
+        console.log('SIGNUP PAYLOAD:', { email: body.email });
+        return this.authService.signup(body.email, body.password);
+    }
+
+    @Public()
     @Post('login')
     async login(@Body() body: { email: string; password: string }) {
         console.log('LOGIN PAYLOAD:', body);

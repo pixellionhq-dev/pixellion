@@ -48,6 +48,44 @@ export class AuthService {
         };
     }
 
+    async signup(email: string, password: string) {
+        const existing = await this.prisma.user.findFirst({
+            where: { email },
+        });
+        if (existing) {
+            throw new ConflictException('Email already exists');
+        }
+
+        const passwordHash = await bcrypt.hash(password, 12);
+        const username = `${email.split('@')[0]}_${Math.random().toString(36).slice(2, 8)}`;
+
+        const { user, buyer } = await this.prisma.$transaction(async (tx) => {
+            const user = await tx.user.create({
+                data: { email, username, passwordHash },
+            });
+
+            const buyer = await tx.buyer.create({
+                data: {
+                    userId: user.id,
+                    country: 'US',
+                    flag: '🇺🇸',
+                    color: this.generateColor(),
+                },
+            });
+
+            return { user, buyer };
+        });
+
+        const token = this.jwtService.sign({ sub: user.id, email: user.email });
+
+        return {
+            access_token: token,
+            token,
+            user: { id: user.id, email: user.email, username: user.username },
+            buyer: { id: buyer.id, color: buyer.color },
+        };
+    }
+
     async login(email: string, password: string) {
         const user = await this.prisma.user.findUnique({
             where: { email },
