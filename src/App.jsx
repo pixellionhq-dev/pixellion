@@ -8,8 +8,7 @@ import Leaderboard from './components/Leaderboard';
 import BuyerDirectory from './components/BuyerDirectory';
 import BrandProfile from './components/BrandProfile';
 import Pulse from './components/Pulse';
-import { apiClient } from './api/client';
-import { supabase } from './utils/supabase';
+
 import usePixelViewport from './store/usePixelViewport';
 import { BOARD_WIDTH, BOARD_HEIGHT } from './constants/canvasConfig';
 
@@ -18,38 +17,6 @@ export default function App() {
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
   const { blocks, setViewport, refresh } = usePixelViewport();
-
-  useEffect(() => {
-    // Handle OAuth redirect callback
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        const { data } = await supabase.auth.getSession();
-        if (!data?.session?.access_token) return;
-
-        const existingToken = localStorage.getItem('token');
-        if (existingToken) return; // already logged in, skip
-
-        try {
-          const { data } = await apiClient.post('/auth/supabase', {
-            supabase_token: session.access_token,
-          });
-          const payload = data?.data ?? data;
-          if (payload?.token) {
-            localStorage.setItem('token', payload.token);
-            window.dispatchEvent(new Event('auth:changed'));
-          }
-        } catch (err) {
-          console.error('Backend exchange failed:', err);
-        }
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

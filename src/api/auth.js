@@ -22,8 +22,10 @@ export const register = async (email, username, password) => {
 export const login = async (email, password) => {
     const { data } = await apiClient.post('/auth/login', { email, password });
     const payload = data?.data ?? data;
-    if (payload?.token) {
-        setAuthToken(payload.token);
+    const token = payload?.access_token || payload?.token;
+    if (token) {
+        console.log("TOKEN:", token);
+        setAuthToken(token);
     }
     return payload;
 };
