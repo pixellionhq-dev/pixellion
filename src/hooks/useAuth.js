@@ -7,7 +7,14 @@ export const useAuth = () => {
 
     const { data: user, isLoading, refetch } = useQuery({
         queryKey: ['auth'],
-        queryFn: getMe,
+        queryFn: async () => {
+            try {
+                return await getMe();
+            } catch {
+                console.log("Not logged in — continue as guest");
+                return null;
+            }
+        },
         retry: false,
         enabled: !!localStorage.getItem('token'),
     });
