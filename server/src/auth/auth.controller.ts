@@ -36,7 +36,7 @@ export class AuthController {
 
     @Public()
     @Post('supabase')
-    async supabase(@Body() body: { access_token: string }) {
-        return this.authService.supabaseLogin(body.access_token);
+    async supabase(@Body("access_token") access_token: string) {
+        return this.authService.supabaseLogin(access_token);
     }
 }

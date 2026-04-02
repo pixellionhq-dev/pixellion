@@ -145,6 +145,11 @@ export class AuthService {
         const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+        console.log("ENV CHECK:");
+        console.log("SUPABASE_URL:", supabaseUrl);
+        console.log("SERVICE_ROLE_KEY exists:", !!supabaseKey);
+        console.log("ACCESS TOKEN:", access_token?.slice(0, 30));
+
         if (!supabaseUrl || !supabaseKey) {
             throw new HttpException({ message: 'Supabase admin credentials missing', code: 'SUPABASE_ADMIN_MISSING' }, HttpStatus.INTERNAL_SERVER_ERROR);
         }
@@ -153,8 +158,10 @@ export class AuthService {
 
         const { data, error } = await supabaseAdmin.auth.getUser(access_token);
 
+        console.log("SUPABASE RESPONSE:", data, error);
+
         if (error || !data?.user) {
-            throw new UnauthorizedException('Invalid Supabase access token');
+            throw new UnauthorizedException(error?.message || 'Invalid Supabase access token');
         }
 
         const email = typeof data.user.email === 'string' ? data.user.email : '';
