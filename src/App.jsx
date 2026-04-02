@@ -23,22 +23,46 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       const { data } = await supabase.auth.getSession()
-
       if (data?.session) {
         const token = data.session.access_token
-
-        const res = await apiClient.post("/auth/supabase", { supabase_token: token }, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
-
-        localStorage.setItem("token", res.data.access_token || res.data.token)
-        window.dispatchEvent(new Event('auth:changed'));
+        try {
+          const res = await apiClient.post("/auth/supabase", { supabase_token: token }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          localStorage.setItem("token", res.data.access_token || res.data.token)
+          window.dispatchEvent(new Event('auth:changed'));
+        } catch (e) {
+          console.error("Init auth failed:", e)
+        }
       }
     }
 
     initAuth()
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session && event === 'SIGNED_IN') {
+          console.log("USER LOGGED IN:", session)
+          const token = session.access_token
+          
+          try {
+            const res = await apiClient.post("/auth/supabase", { supabase_token: token }, {
+              headers: { Authorization: `Bearer ${token}` }
+            })
+            localStorage.setItem("token", res.data.access_token || res.data.token)
+            window.location.reload()
+          } catch (e) {
+            console.error("Login sync failed:", e)
+          }
+        } else if (!session || event === 'SIGNED_OUT') {
+          localStorage.removeItem("token")
+        }
+      }
+    )
+
+    return () => {
+      listener.subscription.unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
