@@ -21,16 +21,10 @@ export const register = async (email, username, password) => {
 
 export const login = async (email, password) => {
     const response = await apiClient.post('/auth/login', { email, password });
-    if (response.data?.access_token || response.data?.data?.access_token) {
-        const token = response.data.access_token || response.data.data.access_token;
-        console.log("TOKEN:", token);
-        localStorage.setItem("token", token);
+    if (response.data && response.data.access_token) {
+        localStorage.setItem("token", response.data.access_token);
         window.dispatchEvent(new Event('auth:changed'));
-    } else if (response.data?.token || response.data?.data?.token) {
-        const token = response.data.token || response.data.data.token;
-        console.log("TOKEN:", token);
-        localStorage.setItem("token", token);
-        window.dispatchEvent(new Event('auth:changed'));
+        await getMe();
     }
     return response.data;
 };
