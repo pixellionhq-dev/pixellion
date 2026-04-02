@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import PixelBoard from './components/PixelBoard';
@@ -10,8 +9,6 @@ import BuyerDirectory from './components/BuyerDirectory';
 import BrandProfile from './components/BrandProfile';
 import Pulse from './components/Pulse';
 
-import { supabase } from "./utils/supabase";
-import { apiClient } from "./api/client";
 import usePixelViewport from './store/usePixelViewport';
 import { BOARD_WIDTH, BOARD_HEIGHT } from './constants/canvasConfig';
 
@@ -20,57 +17,6 @@ export default function App() {
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
   const { blocks, setViewport, refresh } = usePixelViewport();
-
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    const initAuth = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data?.session) {
-        queryClient.setQueryData(['auth'], data.session.user);
-        const token = data.session.access_token
-        try {
-          const res = await apiClient.post("/auth/supabase", { access_token: token }, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-          localStorage.setItem("token", res.data.access_token || res.data.token)
-          queryClient.invalidateQueries({ queryKey: ['auth'] });
-        } catch (e) {
-          console.error("Init auth failed:", e)
-        }
-      }
-    }
-
-    initAuth()
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session) {
-          queryClient.setQueryData(['auth'], session.user);
-          const token = session.access_token
-          
-          try {
-            const res = await apiClient.post("/auth/supabase", { access_token: token }, {
-              headers: { Authorization: `Bearer ${token}` }
-            })
-            localStorage.setItem("token", res.data.access_token || res.data.token)
-            if (event === 'SIGNED_IN') {
-              queryClient.invalidateQueries({ queryKey: ['auth'] });
-            }
-          } catch (e) {
-            console.error("Login sync failed:", e)
-          }
-        } else {
-          queryClient.setQueryData(['auth'], null);
-          localStorage.removeItem("token")
-        }
-      }
-    )
-
-    return () => {
-      listener.subscription.unsubscribe()
-    }
-  }, [queryClient])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

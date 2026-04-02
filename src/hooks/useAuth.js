@@ -1,56 +1,78 @@
-import { useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMe, login, register, logout } from '../api/auth';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '../utils/supabase';
+import { apiClient } from '../api/client';
 
-export const useAuth = () => {
-    const queryClient = useQueryClient();
+const AuthContext = createContext(null);
 
-    const { data: user, isLoading, refetch } = useQuery({
-        queryKey: ['auth'],
-        queryFn: async () => {
-            try {
-                return await getMe();
-            } catch {
-                console.log("Not logged in — continue as guest");
-                return null;
-            }
-        },
-        retry: false,
-        enabled: !!localStorage.getItem('token'),
-    });
-
-    const reloadAuth = async () => {
-        await queryClient.invalidateQueries({ queryKey: ['auth'] });
-        await refetch();
-    };
+export const AuthProvider = ({ children }) => {
+    const [user, setUser] = useState(null);
 
     useEffect(() => {
-        const onAuthChanged = () => {
-            void reloadAuth();
+        const initAuth = async () => {
+            const { data } = await supabase.auth.getSession();
+            if (data?.session) {
+                // Immediately hydrate UI with Supabase session to prevent "Sign In" flashing
+                setUser(data.session.user);
+                syncBackend(data.session.access_token);
+            }
         };
 
-        window.addEventListener('auth:changed', onAuthChanged);
+        const syncBackend = async (access_token) => {
+            try {
+                // Exchange Supabase token for Backend JWT
+                const res = await apiClient.post("/auth/supabase", { access_token });
+                const token = res.data.access_token || res.data.token;
+                if (!token) return;
+
+                localStorage.setItem("token", token);
+                
+                // Fetch the fully formed user from the backend (with buyer details, colors, etc.)
+                const meRes = await apiClient.get("/auth/me");
+                setUser(prev => ({ ...prev, ...meRes.data }));
+            } catch (err) {
+                console.error("Backend sync failed:", err);
+            }
+        };
+
+        initAuth();
+
+        const { data: listener } = supabase.auth.onAuthStateChange(
+            async (event, session) => {
+                if (session) {
+                    // Instantly sync Supabase user object into the UI State on login!
+                    setUser(session.user);
+                    if (event === 'SIGNED_IN') {
+                        syncBackend(session.access_token);
+                    }
+                } else {
+                    setUser(null);
+                    localStorage.removeItem('token');
+                }
+            }
+        );
+
         return () => {
-            window.removeEventListener('auth:changed', onAuthChanged);
+            listener.subscription.unsubscribe();
         };
     }, []);
 
-    const loginMutation = useMutation({
-        mutationFn: ({ email, password }) => login(email, password),
-        onSuccess: () => reloadAuth(),
-    });
-
-    const registerMutation = useMutation({
-        mutationFn: ({ email, username, password }) => register(email, username, password),
-        onSuccess: () => reloadAuth(),
-    });
-
-    return {
-        user,
-        isLoading,
-        reloadAuth,
-        login: loginMutation.mutateAsync,
-        register: registerMutation.mutateAsync,
-        logout,
+    const logout = async () => {
+        await supabase.auth.signOut();
+        setUser(null);
+        localStorage.removeItem('token');
     };
+
+    return (
+        <AuthContext.Provider value={{ user, logout }}>
+            {children}
+        </AuthContext.Provider>
+    );
+};
+
+export const useAuth = () => {
+    const context = useContext(AuthContext);
+    if (!context) {
+        throw new Error("useAuth must be used within an AuthProvider");
+    }
+    return context;
 };

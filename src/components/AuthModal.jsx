@@ -81,13 +81,13 @@ export default function AuthModal({ isOpen, onClose }) {
                         className="w-full h-[52px] rounded-[14px] border border-black/10"
                         placeholder="you@company.com"
                     />
-                    <Button
+                    <button
                         type="submit"
-                        disabled={loading || !email}
-                        className="w-full h-[52px] flex items-center justify-center gap-3 rounded-[14px] border border-black/10 bg-white hover:bg-black/[0.03] font-medium text-[var(--color-text-primary)] text-sm transition-colors"
+                        disabled={loading || !email.trim()}
+                        className="w-full h-[52px] flex items-center justify-center gap-3 rounded-[14px] border border-black/10 bg-white hover:bg-black/[0.03] font-medium text-[var(--color-text-primary)] text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? <span className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black inline-block animate-spin" /> : 'Continue with Email'}
-                    </Button>
+                    </button>
                 </form>
 
                 <div className="relative my-4">
