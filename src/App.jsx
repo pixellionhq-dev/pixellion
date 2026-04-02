@@ -9,6 +9,8 @@ import BuyerDirectory from './components/BuyerDirectory';
 import BrandProfile from './components/BrandProfile';
 import Pulse from './components/Pulse';
 
+import { supabase } from "./utils/supabase";
+import { apiClient } from "./api/client";
 import usePixelViewport from './store/usePixelViewport';
 import { BOARD_WIDTH, BOARD_HEIGHT } from './constants/canvasConfig';
 
@@ -17,6 +19,27 @@ export default function App() {
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
   const { blocks, setViewport, refresh } = usePixelViewport();
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const { data } = await supabase.auth.getSession()
+
+      if (data?.session) {
+        const token = data.session.access_token
+
+        const res = await apiClient.post("/auth/supabase", { supabase_token: token }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+
+        localStorage.setItem("token", res.data.access_token || res.data.token)
+        window.dispatchEvent(new Event('auth:changed'));
+      }
+    }
+
+    initAuth()
+  }, [])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

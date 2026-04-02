@@ -12,5 +12,6 @@ export const getDirectory = async (search, country) => {
 
 export const getStats = async () => {
     const { data } = await apiClient.get('/stats');
+    console.log("STATS RESPONSE:", data);
     return data?.data ?? data;
 };
