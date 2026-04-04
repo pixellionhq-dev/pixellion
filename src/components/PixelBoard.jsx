@@ -1649,110 +1649,24 @@ export default function PixelBoard() {
     const zoomPercent = Math.round(zoomDisplay * 100);
 
     return (
-        <section id="board" className="bg-[var(--color-surface-elevated)] border-y border-[var(--color-border-subtle)] py-20 w-full relative">
-            <div className="px-6 max-w-6xl mx-auto">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">Core Canvas</h2>
-                        <p className="text-sm text-[var(--color-text-tertiary)] mt-1">
-                            {BOARD_WIDTH}×{BOARD_HEIGHT} grid — 1,000,000 pixels — Buy rectangular pixel blocks
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 bg-white border border-[var(--color-border)] rounded-lg p-1">
-                            <button onClick={() => updateTargetZoom(camera.current.zoom * 0.7)} className="w-8 h-8 flex items-center justify-center rounded text-sm hover:bg-gray-100 transition-colors">−</button>
-                            <button onClick={() => fitToViewport()} className="px-2 h-8 flex items-center justify-center rounded text-xs font-medium hover:bg-gray-100 transition-colors">{zoomPercent}%</button>
-                            <button onClick={() => updateTargetZoom(camera.current.zoom * 1.4)} className="w-8 h-8 flex items-center justify-center rounded text-sm hover:bg-gray-100 transition-colors">+</button>
-                        </div>
-                        <button onClick={() => fitToViewport()} className="text-xs font-medium text-[var(--color-text-tertiary)] bg-white border border-[var(--color-border)] rounded-lg px-3 h-8 hover:bg-gray-50 transition-colors" title="Fit board to screen">
-                            Fit
-                        </button>
-                        <button
-                            onClick={() => setHeatmapVisible(v => !v)}
-                            className={`text-xs font-medium border rounded-lg px-3 h-8 transition-colors ${heatmapVisible
-                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                                    : 'bg-white border-[var(--color-border)] text-[var(--color-text-tertiary)] hover:bg-gray-50'
-                                }`}
-                            title="Toggle heatmap overlay"
-                        >
-                            🗺 Heatmap
-                        </button>
-                    </div>
-                    <BrandSearch ownedPixels={ownedPixels} onSelectBrand={panToBrand} />
-                </div>
+        <>
+            <div id="board" className="absolute inset-0 w-full h-full overflow-hidden bg-[var(--color-surface)]">
+            <AnimatePresence>
+                {toastMessage && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -20 }} transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                        className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-xl border border-white/10 text-white text-sm font-medium px-6 py-3 rounded-full shadow-2xl z-50 pointer-events-none"
+                    >
+                        {toastMessage}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-                <AnimatePresence>
-                    {toastMessage && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -20 }} transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                            className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-xl border border-white/10 text-white text-sm font-medium px-6 py-3 rounded-full shadow-2xl z-50 pointer-events-none"
-                        >
-                            {toastMessage}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
-                {/* Selection methods */}
-                <div className="flex flex-wrap items-end gap-4 mb-4 p-3 bg-white border border-[var(--color-border)] rounded-xl shadow-sm">
-                    <div className="flex items-end gap-2">
-                        <div>
-                            <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1">Pixel count</label>
-                            <Input
-                                type="number" min="1" value={quantityInput} onChange={e => setQuantityInput(e.target.value)}
-                                placeholder="e.g. 5000" className="w-24 px-3 py-1.5 min-h-[32px] text-sm"
-                            />
-                        </div>
-                        <Button
-                            onClick={() => {
-                                const n = parseInt(quantityInput, 10);
-                                if (n > 0) {
-                                    let w = Math.floor(Math.sqrt(n));
-                                    while (n % w !== 0 && w > 1) { w--; }
-                                    allocateBlock(w, Math.floor(n / w));
-                                }
-                                else alert('Enter a value greater than 0');
-                            }}
-                            className="px-3 py-1.5 text-sm rounded shadow-none"
-                        >Select</Button>
-                    </div>
-                    <div className="w-px h-8 bg-gray-200"></div>
-                    <div className="flex items-end gap-2">
-                        <div>
-                            <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1">Width</label>
-                            <Input
-                                type="number" min="1" max="1000" value={widthInput} onChange={e => setWidthInput(e.target.value)}
-                                placeholder="W" className="w-16 px-2 py-1.5 min-h-[32px] text-sm"
-                            />
-                        </div>
-                        <span className="text-[var(--color-text-tertiary)] text-sm pb-1.5">×</span>
-                        <div>
-                            <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1">Height</label>
-                            <Input
-                                type="number" min="1" max="1000" value={heightInput} onChange={e => setHeightInput(e.target.value)}
-                                placeholder="H" className="w-16 px-2 py-1.5 min-h-[32px] text-sm"
-                            />
-                        </div>
-                        <Button
-                            onClick={() => {
-                                const w = parseInt(widthInput, 10);
-                                const h = parseInt(heightInput, 10);
-                                if (w > 0 && h > 0) allocateBlock(w, h);
-                            }}
-                            className="px-3 py-1.5 text-sm rounded shadow-none"
-                        >Select</Button>
-                    </div>
-                    <div className="w-px h-8 bg-gray-200"></div>
-                    <p className="text-xs text-[var(--color-text-tertiary)] pb-2">
-                        drag canvas to select · hold <kbd className="px-1 py-0.5 bg-gray-100 rounded text-[10px] font-mono">Space</kbd> + drag to pan · scroll to zoom
-                    </p>
-                </div>
-
-                {/* Canvas viewport */}
-                <div
-                    ref={containerRef}
-                    className="bg-gray-100 rounded-2xl border border-gray-300 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden relative"
-                    style={{ height: 'calc(100vh - 280px)', minHeight: 400 }}
-                >
+            {/* Canvas viewport */}
+            <div
+                ref={containerRef}
+                className="absolute inset-0 w-full h-full"
+            >
                     <canvas
                         ref={canvasRef}
                         style={{
@@ -1854,15 +1768,15 @@ export default function PixelBoard() {
 
                 {selectedPixels.size > 0 && (
                     <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[90] animate-slide-in">
-                        <div className="bg-white shadow-2xl px-6 py-4 rounded-2xl flex items-center gap-6 border border-gray-200">
+                        <div className="glass-card shadow-2xl px-6 py-4 rounded-2xl flex items-center gap-6 border border-[var(--color-border-subtle)] bg-white/80">
                             <div className="flex flex-col gap-0.5">
                                 <p className="text-xs font-medium text-gray-500">
-                                    <span className="font-bold text-gray-900">{selectedPixels.size}</span> pixels selected
+                                    <span className="font-bold text-[var(--color-text-primary)]">{selectedPixels.size}</span> pixels selected
                                 </p>
-                                <p className="text-xs font-medium text-gray-500">Price: <span className="text-gray-900">₹100</span> / px</p>
-                                <p className="text-sm font-bold text-gray-900 mt-1">Total: ₹{(selectedPixels.size * 100).toLocaleString('en-IN')}</p>
+                                <p className="text-xs font-medium text-gray-500">Price: <span className="text-[var(--color-text-primary)]">₹100</span> / px</p>
+                                <p className="text-sm font-bold text-[var(--color-text-primary)] mt-1">Total: ₹{(selectedPixels.size * 100).toLocaleString('en-IN')}</p>
                             </div>
-                            <div className="w-px h-10 bg-gray-200"></div>
+                            <div className="w-px h-10 bg-[var(--color-border-subtle)]"></div>
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setSelectedPixels(new Set())} className="text-xs font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">Cancel</button>
                                 <Button onClick={handleCheckoutClick} className="bg-[var(--color-accent)] text-white px-6 py-2.5 rounded-xl text-sm transition shadow-none hover:bg-blue-700">
@@ -1872,6 +1786,36 @@ export default function PixelBoard() {
                         </div>
                     </div>
                 )}
+                
+                {/* Floating Map Controls HUD */}
+                <div className="absolute right-6 bottom-6 flex flex-col items-end gap-3 pointer-events-none z-40">
+                    <MiniMapCanvas
+                        camera={camera}
+                        canvasSize={canvasSize}
+                        ownedPixels={ownedPixels}
+                        onNavigate={onMiniMapNavigate}
+                        zoomDisplay={zoomDisplay}
+                        cursorNear={cursorNearMinimap}
+                    />
+                    
+                    <div className="flex items-center gap-2 pointer-events-auto">
+                        <div className="glass-card flex items-center gap-1 p-1 rounded-[12px] bg-white/70 border border-[var(--color-border-subtle)]">
+                            <button onClick={() => updateTargetZoom(camera.current.zoom * 0.7)} className="w-8 h-8 flex items-center justify-center rounded-[8px] text-sm hover:bg-white/80 transition-colors">−</button>
+                            <button onClick={() => fitToViewport()} className="px-2 h-8 flex items-center justify-center rounded-[8px] text-[11px] font-semibold hover:bg-white/80 transition-colors w-12">{zoomPercent}%</button>
+                            <button onClick={() => updateTargetZoom(camera.current.zoom * 1.4)} className="w-8 h-8 flex items-center justify-center rounded-[8px] text-sm hover:bg-white/80 transition-colors">+</button>
+                        </div>
+                        <button
+                            onClick={() => setHeatmapVisible(v => !v)}
+                            className={`glass-card p-2 rounded-[12px] transition border border-[var(--color-border-subtle)] bg-white/70 ${heatmapVisible ? 'text-green-600 border-green-500/30' : 'text-[var(--color-text-secondary)] hover:text-black'}`}
+                            title="Toggle heatmap overlay"
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M5 20h14a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"></path>
+                                <path d="M12 4v16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
@@ -1880,6 +1824,6 @@ export default function PixelBoard() {
                 onSubmit={handlePurchase} selectedCount={selectedPixels.size} pricePerPixel={100} isPurchasing={isProcessing}
                 purchaseError={purchaseError} setPurchaseError={setPurchaseError} uploadProgress={uploadProgress}
             />
-        </section>
+        </>
     );
 }
