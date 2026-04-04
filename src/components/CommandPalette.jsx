@@ -5,7 +5,7 @@ import usePixelViewport from '../store/usePixelViewport';
 export default function CommandPalette({ onSelectBrand }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
-    const { brands } = usePixelViewport(state => ({ brands: state.brands }));
+    const { brands, blocks } = usePixelViewport(state => ({ brands: state.brands, blocks: state.blocks }));
 
     useEffect(() => {
         const down = (e) => {
@@ -19,9 +19,24 @@ export default function CommandPalette({ onSelectBrand }) {
         return () => document.removeEventListener('keydown', down);
     }, []);
 
+    // Deduplicate and enrich with logos/colors from blocks
+    const enrichedBrandsMap = new Map();
+    (brands || []).forEach(brand => {
+        if (!brand.brandName || enrichedBrandsMap.has(brand.brandName)) return;
+        
+        // Find corresponding block for rich data
+        const b = (blocks || []).find(blk => blk.brandName === brand.brandName);
+        enrichedBrandsMap.set(brand.brandName, {
+            ...brand,
+            color: b?.color || brand.color || '#1e293b',
+            logoUrl: b?.logoUrl || brand.logoUrl
+        });
+    });
+
+    const uniqueBrands = Array.from(enrichedBrandsMap.values());
     const filteredBrands = query === '' 
         ? [] 
-        : (brands || []).filter((brand) => brand.brandName?.toLowerCase().includes(query.toLowerCase()));
+        : uniqueBrands.filter((brand) => brand.brandName?.toLowerCase().includes(query.toLowerCase()));
 
     return (
         <AnimatePresence>
@@ -69,8 +84,11 @@ export default function CommandPalette({ onSelectBrand }) {
                                     >
                                         <div className="flex items-center gap-3">
                                             <div 
-                                                className="w-8 h-8 rounded-full overflow-hidden shadow-sm border border-black/5"
-                                                style={{ backgroundColor: brand.color || '#000' }}
+                                                className="w-8 h-8 rounded-full overflow-hidden shadow-sm border border-black/5 bg-center bg-cover bg-no-repeat flex-shrink-0"
+                                                style={{ 
+                                                    backgroundColor: brand.color,
+                                                    backgroundImage: brand.logoUrl ? `url(${brand.logoUrl})` : 'none'
+                                                }}
                                             />
                                             <span className="font-semibold text-[var(--color-text-primary)] group-hover:text-black">
                                                 {brand.brandName}
