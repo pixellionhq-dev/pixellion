@@ -23,31 +23,31 @@ export default function ShaderBackground() {
       uniform vec2 u_resolution;
       uniform float u_time;
 
-      // Color palette (Dark theme)
-      vec3 col1 = vec3(0.04, 0.04, 0.05); // #0a0a0a
-      vec3 col2 = vec3(0.08, 0.12, 0.18); // slight slate blue
-      vec3 col3 = vec3(0.05, 0.07, 0.10); // deeper dark
+      // Color palette (Light, airy, Apple/Google style)
+      vec3 col1 = vec3(0.98, 0.98, 0.99); // Crisp white
+      vec3 col2 = vec3(0.92, 0.94, 0.97); // Very soft frost blue
+      vec3 col3 = vec3(0.96, 0.96, 0.98); // Off-white
 
       void main() {
         vec2 uv = gl_FragCoord.xy / u_resolution.xy;
         uv = uv * 2.0 - 1.0;
         uv.x *= u_resolution.x / u_resolution.y;
 
-        // Fluid distortion
-        float t = u_time * 0.15;
+        // Fluid distortion (slower, more elegant)
+        float t = u_time * 0.12;
         vec2 p = uv;
-        p.x += sin(t + p.y * 2.0) * 0.5;
-        p.y += cos(t * 0.8 + p.x * 1.5) * 0.5;
+        p.x += sin(t + p.y * 1.5) * 0.3;
+        p.y += cos(t * 0.6 + p.x * 1.2) * 0.3;
         
-        float v = sin(p.x * 3.0 + t) * cos(p.y * 2.0 - t * 1.2);
+        float v = sin(p.x * 2.5 + t) * cos(p.y * 1.5 - t * 0.8);
         
-        // Combine colors based on fluid flow
+        // Combine colors based on elegant fluid flow
         vec3 color = mix(col1, col2, smoothstep(-1.0, 1.0, v));
-        color = mix(color, col3, smoothstep(-0.5, 0.5, sin(uv.x * uv.y * 5.0 + t)));
+        color = mix(color, col3, smoothstep(-0.5, 0.5, sin(uv.x * uv.y * 3.0 + t)));
 
-        // Subtle noise to prevent banding
-        float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 0.015;
-        color += noise;
+        // Subtle noise for frosted/matte texture
+        float noise = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 0.008;
+        color -= noise;
 
         gl_FragColor = vec4(color, 1.0);
       }
