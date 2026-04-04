@@ -175,19 +175,29 @@ export class AuthService {
         if (!user) {
             const providerSuffix = providerId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toLowerCase();
             const username = `${email.split('@')[0]}${providerSuffix ? `_${providerSuffix}` : ''}`;
-            const { user: newUser, buyer } = await this.prisma.$transaction(async (tx) => {
-                const newUser = await tx.user.create({ data: { email, username, passwordHash: '' } });
-                const buyer = await tx.buyer.create({
-                    data: {
-                        userId: newUser.id,
-                        country: 'US',
-                        flag: '🇺🇸',
-                        color: this.generateColor(),
-                    },
+            try {
+                const result = await this.prisma.$transaction(async (tx) => {
+                    const newUser = await tx.user.create({ data: { email, username, passwordHash: '' } });
+                    const buyer = await tx.buyer.create({
+                        data: {
+                            userId: newUser.id,
+                            country: 'US',
+                            flag: '🇺🇸',
+                            color: this.generateColor(),
+                        },
+                    });
+                    return { user: newUser, buyer };
                 });
-                return { user: newUser, buyer };
-            });
-            user = { ...newUser, buyer };
+                user = { ...result.user, buyer: result.buyer };
+            } catch (e: any) {
+                if (e?.code === 'P2002') {
+                    // Concurrent request already created this user — fetch it
+                    user = await this.prisma.user.findUnique({ where: { email }, include: { buyer: true } });
+                    if (!user) throw e;
+                } else {
+                    throw e;
+                }
+            }
         }
         
         const token = this.jwtService.sign({ sub: user.id, email: user.email });

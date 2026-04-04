@@ -84,15 +84,59 @@ export class PixelsService {
       create: { userId },
     });
 
-    const purchase = await this.prisma.purchase.create({
-      data: {
-        buyerId: buyer.id,
-        brandName: brandName ?? '',
-        url: brandUrl,
-        logoUrl,
-        pixelCount: pixels.length,
-        totalPrice: pixels.length * PIXEL_PRICE,
-      },
+    const purchase = await this.prisma.$transaction(async (tx) => {
+      // Conflict check — reject if any of these pixels are already taken
+      const taken = await tx.pixel.findMany({
+        where: { OR: pixels.map((p) => ({ x: p.x, y: p.y })) },
+        select: { x: true, y: true },
+      });
+      if (taken.length) {
+        throw new BadRequestException(
+          `Pixels already taken: ${taken.map((p) => `${p.x},${p.y}`).join(' ')}`
+        );
+      }
+
+      const purchase = await tx.purchase.create({
+        data: {
+          buyerId: buyer.id,
+          brandName: brandName ?? '',
+          url: brandUrl,
+          logoUrl,
+          fitMode: fitMode ?? 'cover',
+          imageWidth,
+          imageHeight,
+          pixelCount: pixels.length,
+          totalPrice: pixels.length * PIXEL_PRICE,
+        },
+      });
+
+      await tx.pixel.createMany({
+        data: pixels.map((p) => ({
+          x: p.x,
+          y: p.y,
+          ownerId: buyer.id,
+          purchaseId: purchase.id,
+          color: color ?? '#0a0a0a',
+        })),
+      });
+
+      const xs = pixels.map((p) => p.x);
+      const ys = pixels.map((p) => p.y);
+      const xStart = Math.min(...xs);
+      const yStart = Math.min(...ys);
+
+      await tx.pixelBlock.create({
+        data: {
+          brandId: purchase.id,
+          ownerId: buyer.id,
+          xStart,
+          yStart,
+          width: Math.max(...xs) - xStart + 1,
+          height: Math.max(...ys) - yStart + 1,
+        },
+      });
+
+      return purchase;
     });
 
     return purchase;
