@@ -5,7 +5,7 @@ export const useLeaderboard = () => {
     return useQuery({
         queryKey: ['leaderboard'],
         queryFn: getLeaderboard,
-        initialData: [],
+        placeholderData: [],
         staleTime: 120_000,
         gcTime: 300_000,
         refetchOnWindowFocus: false,
@@ -16,7 +16,7 @@ export const useDirectory = (search, country) => {
     return useQuery({
         queryKey: ['buyers', search, country],
         queryFn: () => getDirectory(search, country),
-        initialData: [],
+        placeholderData: [],
         staleTime: 120_000,
         gcTime: 300_000,
         refetchOnWindowFocus: false,
@@ -26,7 +26,7 @@ export const useStats = () => {
     return useQuery({
         queryKey: ['stats'],
         queryFn: getStats,
-        initialData: null,
+        placeholderData: null,
         staleTime: 60_000,
         gcTime: 300_000,
         refetchOnWindowFocus: false,

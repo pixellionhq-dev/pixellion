@@ -5,11 +5,11 @@
   --color-surface: #fafafa;
   --color-surface-elevated: #ffffff;
   --color-surface-hover: #f1f3f5;
-  --color-border: rgba(0,0,0,0.08);
-  --color-border-subtle: rgba(0,0,0,0.04);
+  --color-border: rgba(0,0,0,0.06);
+  --color-border-subtle: rgba(0,0,0,0.03);
   --color-text-primary: #0a0a0a;
-  --color-text-secondary: #6b7280;
-  --color-text-tertiary: #9ca3af;
+  --color-text-secondary: #52525b;
+  --color-text-tertiary: #a1a1aa;
   --color-accent: #2563eb;
   --color-accent-subtle: #eff6ff;
   --color-glow: rgba(37, 99, 235, 0.4);
@@ -17,10 +17,10 @@
   --color-pixel-owned: #1e293b;
   --color-pixel-hover: #dbeafe;
   --color-pixel-selected: #3b82f6;
-  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
-  --radius-card: 20px;
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
-  --shadow-hover: 0 2px 8px rgba(0,0,0,0.06), 0 16px 40px rgba(0,0,0,0.1);
+  --font-sans: 'Geist', -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --radius-card: 24px;
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 20px 40px -10px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --shadow-hover: 0 8px 12px -2px rgba(0, 0, 0, 0.03), 0 32px 56px -12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 @layer base {

@@ -8,6 +8,7 @@ import Leaderboard from './components/Leaderboard';
 import BuyerDirectory from './components/BuyerDirectory';
 import BrandProfile from './components/BrandProfile';
 import Pulse from './components/Pulse';
+import ShaderBackground from './components/ShaderBackground';
 
 import usePixelViewport from './store/usePixelViewport';
 import { BOARD_WIDTH, BOARD_HEIGHT } from './constants/canvasConfig';
@@ -72,7 +73,8 @@ export default function App() {
   }, [blocks, brands]);
 
   return (
-    <div className="min-h-screen bg-[var(--color-surface)]">
+    <div className="min-h-screen bg-transparent relative z-0">
+      <ShaderBackground />
       <Navbar />
       <main>
         <Routes>
