@@ -5,7 +5,7 @@ import usePixelViewport from '../store/usePixelViewport';
 export default function CommandPalette({ onSelectBrand }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
-    const { brands, blocks } = usePixelViewport(state => ({ brands: state.brands, blocks: state.blocks }));
+    const { brands } = usePixelViewport(state => ({ brands: state.brands }));
 
     useEffect(() => {
         const down = (e) => {
@@ -19,24 +19,9 @@ export default function CommandPalette({ onSelectBrand }) {
         return () => document.removeEventListener('keydown', down);
     }, []);
 
-    // Deduplicate and enrich with logos/colors from blocks
-    const enrichedBrandsMap = new Map();
-    (brands || []).forEach(brand => {
-        if (!brand.brandName || enrichedBrandsMap.has(brand.brandName)) return;
-        
-        // Find corresponding block for rich data
-        const b = (blocks || []).find(blk => blk.brandName === brand.brandName);
-        enrichedBrandsMap.set(brand.brandName, {
-            ...brand,
-            color: b?.color || brand.color || '#1e293b',
-            logoUrl: b?.logoUrl || brand.logoUrl
-        });
-    });
-
-    const uniqueBrands = Array.from(enrichedBrandsMap.values());
     const filteredBrands = query === '' 
         ? [] 
-        : uniqueBrands.filter((brand) => brand.brandName?.toLowerCase().includes(query.toLowerCase()));
+        : (brands || []).filter((brand) => brand.brandName?.toLowerCase().includes(query.toLowerCase()));
 
     return (
         <AnimatePresence>

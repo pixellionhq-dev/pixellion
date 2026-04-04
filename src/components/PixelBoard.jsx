@@ -818,16 +818,14 @@ export default function PixelBoard() {
         scheduleRedraw();
     }, [canvasSize, clampCamera, scheduleRedraw]);
 
-    // --- Zoom-to-brand navigation (Feature 5) ---
-    const panToBrand = useCallback((brandName) => {
-        if (!ownedPixels || !brandName) return;
-        const brandPixels = ownedPixels.filter(p =>
-            (p.brandName || '').toLowerCase() === brandName.toLowerCase()
-        );
-        if (brandPixels.length === 0) return;
+    // --- Zoom-to-purchase navigation (Feature 5 modified) ---
+    const panToPurchase = useCallback((purchaseId) => {
+        if (!ownedPixels || !purchaseId) return;
+        const purchasePixels = ownedPixels.filter(p => p.purchaseId === purchaseId || p.ownerId === purchaseId);
+        if (purchasePixels.length === 0) return;
 
-        const xs = brandPixels.map(p => p.x);
-        const ys = brandPixels.map(p => p.y);
+        const xs = purchasePixels.map(p => p.x);
+        const ys = purchasePixels.map(p => p.y);
         const minX = Math.min(...xs);
         const maxX = Math.max(...xs);
         const minY = Math.min(...ys);
@@ -873,14 +871,12 @@ export default function PixelBoard() {
     // --- Global Command Event Listener ---
     useEffect(() => {
         const handler = (e) => {
-            const brandId = e.detail;
-            if (!brandSummaryMap.has(brandId)) return;
-            const brandName = brandSummaryMap.get(brandId).brandName;
-            panToBrand(brandName);
+            const purchaseId = e.detail;
+            panToPurchase(purchaseId);
         };
         document.addEventListener('map:zoomToBrand', handler);
         return () => document.removeEventListener('map:zoomToBrand', handler);
-    }, [panToBrand, brandSummaryMap]);
+    }, [panToPurchase]);
 
     // --- Zoom animation ---
     const animateZoom = useCallback(() => {
