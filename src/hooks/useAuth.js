@@ -8,29 +8,39 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
 
     useEffect(() => {
-        const initAuth = async () => {
-            const { data } = await supabase.auth.getSession();
-            if (data?.session) {
-                // Immediately hydrate UI with Supabase session to prevent "Sign In" flashing
-                setUser(data.session.user);
-                syncBackend(data.session.access_token);
-            }
-        };
+        let mounted = true;
 
-        const syncBackend = async (access_token) => {
+        const exchangeTokenAndFetchUser = async (supabaseAccessToken) => {
             try {
-                // Exchange Supabase token for Backend JWT
-                const res = await apiClient.post("/auth/supabase", { access_token });
+                // 1. Send Supabase token to backend
+                const res = await apiClient.post("/auth/supabase", { 
+                    access_token: supabaseAccessToken 
+                });
+                
                 const token = res.data.access_token || res.data.token;
                 if (!token) return;
 
+                // 2. MUST store backend JWT (localStorage)
                 localStorage.setItem("token", token);
                 
-                // Fetch the fully formed user from the backend (with buyer details, colors, etc.)
+                // 3. fetch /auth/me strictly via backend JWT
                 const meRes = await apiClient.get("/auth/me");
-                setUser(prev => ({ ...prev, ...meRes.data }));
+                if (mounted) setUser(meRes.data);
             } catch (err) {
                 console.error("Backend sync failed:", err);
+                localStorage.removeItem("token");
+                if (mounted) setUser(null);
+            }
+        };
+
+        const initAuth = async () => {
+            const { data } = await supabase.auth.getSession();
+            if (data?.session) {
+                // Only act on Backend JWT flow
+                await exchangeTokenAndFetchUser(data.session.access_token);
+            } else {
+                localStorage.removeItem("token");
+                if (mounted) setUser(null);
             }
         };
 
@@ -38,28 +48,26 @@ export const AuthProvider = ({ children }) => {
 
         const { data: listener } = supabase.auth.onAuthStateChange(
             async (event, session) => {
-                if (session) {
-                    // Instantly sync Supabase user object into the UI State on login!
-                    setUser(session.user);
-                    if (event === 'SIGNED_IN') {
-                        syncBackend(session.access_token);
-                    }
-                } else {
-                    setUser(null);
+                if (session && event === 'SIGNED_IN') {
+                    // Always exchange it for backend JWT
+                    await exchangeTokenAndFetchUser(session.access_token);
+                } else if (!session || event === 'SIGNED_OUT') {
                     localStorage.removeItem('token');
+                    if (mounted) setUser(null);
                 }
             }
         );
 
         return () => {
+            mounted = false;
             listener.subscription.unsubscribe();
         };
     }, []);
 
     const logout = async () => {
         await supabase.auth.signOut();
-        setUser(null);
         localStorage.removeItem('token');
+        setUser(null);
     };
 
     return (

@@ -42,7 +42,7 @@ export class AuthService {
         const token = this.jwtService.sign({ sub: user.id, email: user.email });
 
         return {
-            token,
+            access_token: token,
             user: { id: user.id, email: user.email, username: user.username },
             buyer: { id: buyer.id, color: buyer.color },
         };
@@ -103,7 +103,7 @@ export class AuthService {
         const token = this.jwtService.sign({ sub: user.id, email: user.email });
 
         return {
-            token,
+            access_token: token,
             user: { id: user.id, email: user.email, username: user.username },
             buyer: user.buyer
                 ? { id: user.buyer.id, color: user.buyer.color }
@@ -192,7 +192,7 @@ export class AuthService {
         
         const token = this.jwtService.sign({ sub: user.id, email: user.email });
         return {
-            token,
+            access_token: token,
             user: { id: user.id, email: user.email, username: user.username },
             buyer: user.buyer ? { id: user.buyer.id, color: user.buyer.color } : null,
         };
