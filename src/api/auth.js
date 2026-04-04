@@ -22,7 +22,7 @@ export const register = async (email, username, password) => {
 export const login = async (email, password) => {
     const response = await apiClient.post('/auth/login', { email, password });
     console.log("LOGIN RESPONSE DATA:", response.data);
-    const token = response.data?.access_token || response.data?.token;
+    const token = response.data?.data?.access_token || response.data?.data?.token || response.data?.access_token || response.data?.token;
     if (token) {
         localStorage.setItem("token", token);
         window.dispatchEvent(new Event('auth:changed'));
