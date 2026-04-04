@@ -44,13 +44,31 @@ export class PixelsController {
       throw new BadRequestException('Invalid viewport values');
     }
 
-    return this.pixelsService.getViewportBlocks({
+    const cacheKey = `${parsedMinX}:${parsedMinY}:${parsedMaxX}:${parsedMaxY}`;
+    const now = Date.now();
+
+    // In-memory cache valid for 30 seconds
+    if (!this.viewportCache) {
+       this.viewportCache = new Map();
+    }
+    const cached = this.viewportCache.get(cacheKey);
+    if (cached && (now - cached.timestamp < 30_000)) {
+       return cached.data;
+    }
+
+    // Cache-Miss or Stale -> fetch new
+    const data = await this.pixelsService.getViewportBlocks({
       minX: parsedMinX,
       minY: parsedMinY,
       maxX: parsedMaxX,
       maxY: parsedMaxY,
     });
+
+    this.viewportCache.set(cacheKey, { timestamp: now, data });
+    return data;
   }
+
+  private viewportCache: Map<string, any>;
 
   @UseGuards(JwtAuthGuard)
   @Post('purchase')

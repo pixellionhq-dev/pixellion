@@ -572,13 +572,15 @@ export default function PixelBoard() {
                 } else if (drawW > 20 && drawH > 12) {
                     // Show loading/error placeholder with brand initial
                     const isError = entry && entry.status === 'error';
-                    ctx.fillStyle = isError ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.7)';
+                    
+                    // Always draw an opaque background first so the text is visible over the black canvas pixels
+                    ctx.fillStyle = isError ? '#F3F4F6' : 'rgba(255, 255, 255, 0.8)';
                     ctx.fillRect(tl.x, tl.y, drawW, drawH);
 
                     // Draw brand initial letter
                     const brandName = block.groupId ? String(block.groupId).charAt(0).toUpperCase() : '?';
                     const fontSize = Math.max(8, Math.min(drawW * 0.4, drawH * 0.5, 32));
-                    ctx.fillStyle = isError ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.1)';
+                    ctx.fillStyle = isError ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)';
                     ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';

@@ -170,6 +170,33 @@ function fetchImage(url, retryCount) {
 
   img.onload = () => onDone(true);
   img.onerror = (e) => {
+    // Fallback: If we failed to load from /logos/, maybe it's an older image located at /pixellion-logos/logos/
+    if (url.includes('.r2.dev') && url.includes('/logos/') && !url.includes('/pixellion-logos/logos/')) {
+        const fallbackUrl = url.replace('/logos/', '/pixellion-logos/logos/');
+        console.log('[ImageCache] Falling back to nested bucket URL:', fallbackUrl);
+        const fallbackImg = new Image();
+        fallbackImg.decoding = 'async';
+        fallbackImg.onload = () => {
+            // Success on fallback! Store the fallback image in the entry.
+            const finalize = () => {
+                const readyEntry = { status: 'ready', img: fallbackImg, loadedAt: Date.now(), retries: retryCount };
+                cache.set(url, readyEntry);
+                if (cache.size > IMAGE_CACHE_MAX) evictOne(url);
+                _onRedraw();
+            };
+            if (typeof fallbackImg.decode === 'function') {
+                fallbackImg.decode().then(finalize).catch(finalize);
+            } else { finalize(); }
+            clearTimeout(timeoutId);
+        };
+        fallbackImg.onerror = () => {
+            console.error('[ImageCache] Fallback load also failed:', fallbackUrl);
+            onDone(false);
+        };
+        fallbackImg.src = fallbackUrl;
+        return;
+    }
+
     console.error('[ImageCache] Failed to load logo URL (possible CORS issue):', url, e);
     onDone(false);
   };
