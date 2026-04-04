@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { useDirectory } from '../hooks/useBuyers';
 import Card from './ui/Card';
 
@@ -65,34 +66,40 @@ export default function BuyerDirectory() {
                     </div>
                 ) : buyers && buyers.length > 0 ? (
                     buyers.map((buyer, index) => (
-                        <Card key={buyer.brand} className={`group p-6 bg-white border-t-[3px] stagger-${(index % 10) + 1}`} style={{ borderTopColor: buyer.color, boxShadow: 'var(--shadow-card)' }}>
-                            <div className="flex items-start justify-between mb-4">
-                                <div
-                                    className="w-12 h-12 rounded-full shadow-sm relative overflow-hidden transition-transform duration-300 group-hover:scale-105 flex items-center justify-center"
-                                    style={{ backgroundColor: buyer.color, boxShadow: `0 -2px 20px ${buyer.color}20` }}
-                                >
-                                    <span className="text-white font-bold text-base">{buyer.brand.slice(0, 2).toUpperCase()}</span>
+                        <motion.div
+                            key={buyer.brand}
+                            whileHover={{ y: -4, boxShadow: '0 12px 32px rgba(0,0,0,0.08)' }}
+                            whileTap={{ scale: 0.96 }}
+                        >
+                            <Card className={`group p-6 bg-white border-t-[3px] stagger-${(index % 10) + 1}`} style={{ borderTopColor: buyer.color, boxShadow: 'var(--shadow-card)', height: '100%' }}>
+                                <div className="flex items-start justify-between mb-4">
+                                    <div
+                                        className="w-12 h-12 rounded-full shadow-sm relative overflow-hidden transition-transform duration-300 group-hover:scale-105 flex items-center justify-center"
+                                        style={{ backgroundColor: buyer.color, boxShadow: `0 -2px 20px ${buyer.color}20` }}
+                                    >
+                                        <span className="text-white font-bold text-base">{buyer.brand.slice(0, 2).toUpperCase()}</span>
+                                    </div>
+                                    <span title={buyer.country} className="text-lg bg-[var(--color-surface-hover)] px-1.5 py-0.5 rounded-md border border-[var(--color-border)] cursor-default transition-colors group-hover:bg-white">
+                                        {buyer.flag}
+                                    </span>
                                 </div>
-                                <span title={buyer.country} className="text-lg bg-[var(--color-surface-hover)] px-1.5 py-0.5 rounded-md border border-[var(--color-border)] cursor-default transition-colors group-hover:bg-white">
-                                    {buyer.flag}
-                                </span>
-                            </div>
 
-                            <h3 className="text-base font-bold text-[var(--color-text-primary)] mb-1 group-hover:text-black transition-colors truncate">
-                                {buyer.brand}
-                            </h3>
+                                <h3 className="text-base font-bold text-[var(--color-text-primary)] mb-1 group-hover:text-black transition-colors truncate">
+                                    {buyer.brand}
+                                </h3>
 
-                            <div className="flex flex-col gap-1.5 mt-4 pt-4 border-t border-[var(--color-border)]">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Owned Pixels</span>
-                                    <span className="text-xl font-bold text-[var(--color-text-primary)] font-mono leading-none">{buyer.pixels.toLocaleString()} <span className="text-xs font-medium text-[var(--color-text-tertiary)]">px</span></span>
+                                <div className="flex flex-col gap-1.5 mt-4 pt-4 border-t border-[var(--color-border-subtle)]">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Owned Pixels</span>
+                                        <span className="text-xl font-bold text-[var(--color-text-primary)] font-mono leading-none">{buyer.pixels.toLocaleString()} <span className="text-xs font-medium text-[var(--color-text-tertiary)]">px</span></span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Joined</span>
+                                        <span className="text-xs font-medium text-[var(--color-text-secondary)] px-2.5 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border-subtle)]">{new Date(buyer.joined).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                                    </div>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-xs font-medium text-[var(--color-text-tertiary)]">Joined</span>
-                                    <span className="text-xs font-medium text-[var(--color-text-secondary)] px-2.5 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)]">{new Date(buyer.joined).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
-                                </div>
-                            </div>
-                        </Card>
+                            </Card>
+                        </motion.div>
                     ))
                 ) : (
                     <div className="col-span-full py-20 text-center flex flex-col items-center justify-center border-2 border-dashed border-[var(--color-border)] rounded-2xl bg-[var(--color-surface-elevated)]/50">

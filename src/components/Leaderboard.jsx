@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { useLeaderboard } from '../hooks/useBuyers';
 
 export default function Leaderboard() {
@@ -47,9 +48,12 @@ export default function Leaderboard() {
                                 const progress = Math.max(0, Math.min(100, (entry.pixels / maxPixels) * 100));
 
                                 return (
-                                    <div
+                                    <motion.div
                                         key={entry.brand}
-                                        className={`leaderboard-row grid grid-cols-[60px_1fr_100px] sm:grid-cols-[80px_1fr_120px_100px] gap-4 px-6 py-4 items-center group stagger-${(index % 10) + 1} border-l-3 border-transparent`}
+                                        whileHover={{ scale: 1.01, backgroundColor: 'var(--color-surface-hover)' }}
+                                        whileTap={{ scale: 0.99 }}
+                                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                                        className={`grid grid-cols-[60px_1fr_100px] sm:grid-cols-[80px_1fr_120px_100px] gap-4 px-6 py-4 items-center group stagger-${(index % 10) + 1} border-l-[3px] border-transparent cursor-pointer`}
                                         style={{ borderLeftColor: 'transparent' }}
                                         onMouseEnter={(e) => { e.currentTarget.style.borderLeftColor = entry.color; }}
                                         onMouseLeave={(e) => { e.currentTarget.style.borderLeftColor = 'transparent'; }}
@@ -74,7 +78,7 @@ export default function Leaderboard() {
                                         </div>
                                         <div className="flex items-center justify-end">
                                             <div className="w-20 text-right">
-                                                <span className="inline-flex items-center justify-end px-2.5 py-1 rounded-md bg-[var(--color-surface-hover)] text-sm font-bold text-[var(--color-text-primary)] border border-[var(--color-border)] w-full font-mono">
+                                                <span className="inline-flex items-center justify-end px-2.5 py-1 rounded-md bg-[var(--color-surface-hover)] text-sm font-bold text-[var(--color-text-primary)] border border-[var(--color-border-subtle)] w-full font-mono">
                                                     {entry.pixels}
                                                 </span>
                                                 <div className="mt-1 h-[2px] w-full bg-[var(--color-border-subtle)] rounded-full overflow-hidden">
@@ -82,7 +86,7 @@ export default function Leaderboard() {
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 );
                             })
                         ) : (

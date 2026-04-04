@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import AuthModal from './AuthModal';
 import { useAuth } from '../hooks/useAuth';
 
@@ -45,18 +46,18 @@ export default function Navbar() {
 
                     {/* Desktop Navigation */}
                     <div className="hidden md:flex items-center gap-8">
-                        <a href="#board" className="group relative text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition">
+                        <motion.a whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} href="#board" className="group relative text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition">
                             Board
                             <span className="absolute -bottom-1 left-0 h-[1px] w-0 bg-[var(--color-text-primary)] transition-all duration-300 group-hover:w-full" />
-                        </a>
-                        <a href="#leaderboard" className="group relative text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition">
+                        </motion.a>
+                        <motion.a whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} href="#leaderboard" className="group relative text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition">
                             Leaderboard
                             <span className="absolute -bottom-1 left-0 h-[1px] w-0 bg-[var(--color-text-primary)] transition-all duration-300 group-hover:w-full" />
-                        </a>
-                        <a href="#directory" className="group relative text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition">
+                        </motion.a>
+                        <motion.a whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} href="#directory" className="group relative text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition">
                             Directory
                             <span className="absolute -bottom-1 left-0 h-[1px] w-0 bg-[var(--color-text-primary)] transition-all duration-300 group-hover:w-full" />
-                        </a>
+                        </motion.a>
                     </div>
 
                     {/* Desktop Auth */}
@@ -79,7 +80,9 @@ export default function Navbar() {
                                 </button>
                             </div>
                         ) : (
-                            <button
+                            <motion.button
+                                whileHover={{ scale: 1.02, boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}
+                                whileTap={{ scale: 0.96 }}
                                 onClick={() => setAuthModalOpen(true)}
                                 className="relative overflow-hidden bg-[var(--color-text-primary)] text-white px-5 py-2.5 rounded-xl text-[14px] font-medium hover:bg-black transition-all shadow-sm flex items-center gap-2 group"
                             >
@@ -88,7 +91,7 @@ export default function Navbar() {
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transform transition-transform group-hover:translate-x-0.5">
                                     <path d="M5 12h14M12 5l7 7-7 7" />
                                 </svg>
-                            </button>
+                            </motion.button>
                         )}
                     </div>
 
