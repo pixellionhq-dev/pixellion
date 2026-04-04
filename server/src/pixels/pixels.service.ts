@@ -40,13 +40,42 @@ export class PixelsService {
   constructor(private prisma: PrismaService) {}
 
   async getViewportBlocks(viewport: Viewport) {
-    return this.prisma.pixelBlock.findMany({
+    const pixelBlocks = await this.prisma.pixelBlock.findMany({
       where: {
         xStart: { lte: viewport.maxX },
         yStart: { lte: viewport.maxY },
       },
       take: 1000,
     });
+
+    if (!pixelBlocks.length) return { blocks: [], brands: [] };
+
+    // brandId stores the purchase.id — fetch purchase metadata for the canvas
+    const purchaseIds = [...new Set(pixelBlocks.map((b) => b.brandId))];
+    const purchases = await this.prisma.purchase.findMany({
+      where: { id: { in: purchaseIds } },
+      select: {
+        id: true,
+        brandName: true,
+        logoUrl: true,
+        pixelCount: true,
+        fitMode: true,
+        imageWidth: true,
+        imageHeight: true,
+      },
+    });
+
+    const brands = purchases.map((p) => ({
+      brandId: p.id,
+      brandName: p.brandName,
+      logoUrl: p.logoUrl,
+      totalPixels: p.pixelCount,
+      fitMode: p.fitMode,
+      imageWidth: p.imageWidth,
+      imageHeight: p.imageHeight,
+    }));
+
+    return { blocks: pixelBlocks, brands };
   }
 
   async purchase(
@@ -76,6 +105,10 @@ export class PixelsService {
       );
 
       logoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
+      console.log('[purchase] logoUrl to save:', logoUrl);
+      if (!R2_PUBLIC_URL) {
+        console.warn('[purchase] WARNING: R2_PUBLIC_URL is not set — logoUrl will be a relative path, logo will not display');
+      }
     }
 
     const buyer = await this.prisma.buyer.upsert({

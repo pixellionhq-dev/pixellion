@@ -7,18 +7,18 @@ export class BuyersService {
 
     async getLeaderboard() {
         const buyers = await this.prisma.buyer.findMany({
-            include: { user: true, _count: { select: { blocks: true } } },
-            orderBy: { blocks: { _count: 'desc' } },
+            include: { user: true, _count: { select: { pixels: true } } },
+            orderBy: { pixels: { _count: 'desc' } },
             take: 10,
         });
 
         return buyers
-            .filter((b) => b._count.blocks > 0)
+            .filter((b) => b._count.pixels > 0)
             .map((b, i) => ({
                 rank: i + 1,
                 id: b.id,
                 brand: b.user?.username || 'Anonymous',
-                pixels: b._count.blocks,
+                pixels: b._count.pixels,
                 country: b.country,
                 flag: b.flag,
                 color: b.color,
@@ -37,16 +37,16 @@ export class BuyersService {
 
         const buyers = await this.prisma.buyer.findMany({
             where,
-            include: { user: true, _count: { select: { blocks: true } } },
+            include: { user: true, _count: { select: { pixels: true } } },
         });
 
         return buyers
-            .filter((b) => b._count.blocks > 0)
+            .filter((b) => b._count.pixels > 0)
             .sort((a, b) => (a.user?.username || '').localeCompare(b.user?.username || ''))
             .map((b) => ({
                 id: b.id,
                 brand: b.user?.username || 'Anonymous',
-                pixels: b._count.blocks,
+                pixels: b._count.pixels,
                 country: b.country,
                 flag: b.flag,
                 color: b.color,
@@ -55,15 +55,15 @@ export class BuyersService {
     }
 
     async getStats() {
-        const [allBlocks, totalBuyers, topBuyer, newestBuyer, mostExpensive] = await Promise.all([
-            this.prisma.pixelBlock.findMany({ select: { width: true, height: true } }),
-            this.prisma.buyer.count({ where: { blocks: { some: {} } } }),
+        const [totalPixelsSold, totalBuyers, topBuyer, newestBuyer, mostExpensive] = await Promise.all([
+            this.prisma.pixel.count(),
+            this.prisma.buyer.count({ where: { pixels: { some: {} } } }),
             this.prisma.buyer.findFirst({
-                include: { user: true, _count: { select: { blocks: true } } },
-                orderBy: { blocks: { _count: 'desc' } },
+                include: { user: true, _count: { select: { pixels: true } } },
+                orderBy: { pixels: { _count: 'desc' } },
             }),
             this.prisma.buyer.findFirst({
-                where: { blocks: { some: {} } },
+                where: { pixels: { some: {} } },
                 include: { user: true },
                 orderBy: { createdAt: 'desc' },
             }),
@@ -72,8 +72,6 @@ export class BuyersService {
                 include: { buyer: { include: { user: true } } },
             }),
         ]);
-
-        const totalPixelsSold = allBlocks.reduce((sum, block) => sum + (block.width * block.height), 0);
 
         return {
             totalPixelsSold,
@@ -86,7 +84,7 @@ export class BuyersService {
                 ? { brand: newestBuyer.user?.username || 'Anonymous' }
                 : { brand: 'N/A' },
             mostPixelsOwned: topBuyer
-                ? { brand: topBuyer.user?.username || 'Anonymous', count: topBuyer._count.blocks }
+                ? { brand: topBuyer.user?.username || 'Anonymous', count: topBuyer._count.pixels }
                 : { brand: 'N/A', count: 0 },
         };
     }
