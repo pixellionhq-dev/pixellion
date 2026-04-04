@@ -870,6 +870,18 @@ export default function PixelBoard() {
         requestAnimationFrame(animatePan);
     }, [ownedPixels, canvasSize, clampCamera, scheduleRedraw]);
 
+    // --- Global Command Event Listener ---
+    useEffect(() => {
+        const handler = (e) => {
+            const brandId = e.detail;
+            if (!brandSummaryMap.has(brandId)) return;
+            const brandName = brandSummaryMap.get(brandId).brandName;
+            panToBrand(brandName);
+        };
+        document.addEventListener('map:zoomToBrand', handler);
+        return () => document.removeEventListener('map:zoomToBrand', handler);
+    }, [panToBrand, brandSummaryMap]);
+
     // --- Zoom animation ---
     const animateZoom = useCallback(() => {
         const c = camera.current;

@@ -1,9 +1,58 @@
 import { motion } from 'framer-motion';
 import { useLeaderboard } from '../hooks/useBuyers';
 
-export default function Leaderboard() {
+export default function Leaderboard({ isHUD }) {
     const { data: leaderboardData } = useLeaderboard();
     const maxPixels = leaderboardData?.[0]?.pixels || 1;
+
+    if (isHUD) {
+        return (
+            <div className="flex flex-col h-full bg-white/40">
+                <div className="px-5 py-4 border-b border-[var(--color-border-subtle)] bg-white/60 sticky top-0 z-10 backdrop-blur-md flex justify-between items-center">
+                    <h3 className="font-semibold text-sm text-[var(--color-text-primary)]">Live Rankings</h3>
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-[10px] font-bold text-green-700 tracking-wide uppercase">Live</span>
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto divide-y divide-[var(--color-border-subtle)]">
+                    {leaderboardData && leaderboardData.length > 0 ? (
+                        leaderboardData.map((entry, index) => {
+                            let rankDisplay = <span className="font-mono text-xs font-semibold text-[var(--color-text-tertiary)]">{entry.rank}</span>;
+                            if (entry.rank === 1) rankDisplay = <span className="text-sm">🥇</span>;
+                            if (entry.rank === 2) rankDisplay = <span className="text-sm">🥈</span>;
+                            if (entry.rank === 3) rankDisplay = <span className="text-sm">🥉</span>;
+                            
+                            const progress = Math.max(0, Math.min(100, (entry.pixels / maxPixels) * 100));
+
+                            return (
+                                <motion.div
+                                    key={entry.brand}
+                                    whileHover={{ backgroundColor: 'var(--color-surface-hover)' }}
+                                    onClick={() => document.dispatchEvent(new CustomEvent('map:zoomToBrand', { detail: entry.brand }))}
+                                    className="flex items-center gap-3 px-5 py-3 cursor-pointer group"
+                                >
+                                    <div className="w-5 flex justify-center">{rankDisplay}</div>
+                                    <div className="w-6 h-6 rounded flex-shrink-0 shadow-sm border border-black/5" style={{ backgroundColor: entry.color }} />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-semibold text-sm text-[var(--color-text-primary)] truncate">{entry.brand}</div>
+                                        <div className="w-full h-1 bg-[var(--color-border)] rounded-full mt-1.5 overflow-hidden">
+                                            <div className="h-full rounded-full" style={{ width: `${progress}%`, backgroundColor: entry.color }} />
+                                        </div>
+                                    </div>
+                                    <div className="text-xs font-mono font-medium text-[var(--color-text-secondary)]">
+                                        {entry.pixels.toLocaleString()}
+                                    </div>
+                                </motion.div>
+                            );
+                        })
+                    ) : (
+                         <div className="py-8 text-center text-xs text-gray-400">No data</div>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <section
