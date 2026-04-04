@@ -78,7 +78,7 @@ export default function BuyerDirectory() {
                                 </span>
                             </div>
 
-                            <h3 className="text-base font-bold text-[var(--color-text-primary)] mb-1 group-hover:text-black transition-colors">
+                            <h3 className="text-base font-bold text-[var(--color-text-primary)] mb-1 group-hover:text-black transition-colors truncate">
                                 {buyer.brand}
                             </h3>
 

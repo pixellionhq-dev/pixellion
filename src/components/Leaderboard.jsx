@@ -57,14 +57,14 @@ export default function Leaderboard() {
                                         <div className="flex items-center justify-center w-8">
                                             {rankDisplay}
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
                                             <div
                                                 className="w-8 h-8 rounded-full shadow-sm flex-shrink-0 relative overflow-hidden group-hover:scale-110 transition-transform duration-300"
                                                 style={{ backgroundColor: entry.color }}
                                             >
                                                 <div className="absolute inset-0 bg-black/10 mix-blend-overlay"></div>
                                             </div>
-                                            <span className="font-semibold text-base text-[var(--color-text-primary)] truncate">
+                                            <span className="font-semibold text-base text-[var(--color-text-primary)] truncate min-w-0">
                                                 {entry.brand}
                                             </span>
                                         </div>

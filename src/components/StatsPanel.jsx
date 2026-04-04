@@ -28,9 +28,9 @@ export default function StatsPanel() {
                         <div>
                             <p className="text-xs font-medium text-[var(--color-text-tertiary)]">Most Expensive Pixel</p>
                             <p className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] mt-1">₹{stats.mostExpensivePixel.price.toLocaleString('en-IN')}</p>
-                            <div className="text-xs text-[var(--color-text-secondary)] mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
-                                <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                                Owned by <span className="font-semibold">{stats.mostExpensivePixel.owner}</span>
+                            <div className="text-xs text-[var(--color-text-secondary)] mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] max-w-full overflow-hidden">
+                                <span className="w-1.5 h-1.5 flex-shrink-0 rounded-full bg-orange-500" />
+                                <span className="truncate">Owned by <span className="font-semibold">{stats.mostExpensivePixel.owner}</span></span>
                             </div>
                         </div>
                     </Card>
@@ -50,9 +50,9 @@ export default function StatsPanel() {
                         <div>
                             <p className="text-xs font-medium text-[var(--color-text-tertiary)]">Largest Property</p>
                             <p className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] mt-1">{stats.mostPixelsOwned.count.toLocaleString()} px</p>
-                            <div className="text-xs text-[var(--color-text-secondary)] mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                Owned by <span className="font-semibold">{stats.mostPixelsOwned.brand}</span>
+                            <div className="text-xs text-[var(--color-text-secondary)] mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] max-w-full overflow-hidden">
+                                <span className="w-1.5 h-1.5 flex-shrink-0 rounded-full bg-blue-500" />
+                                <span className="truncate">Owned by <span className="font-semibold">{stats.mostPixelsOwned.brand}</span></span>
                             </div>
                         </div>
                     </Card>
@@ -92,7 +92,7 @@ export default function StatsPanel() {
                         </div>
                         <div>
                             <p className="text-xs font-medium text-[var(--color-text-tertiary)]">Newest Member</p>
-                            <p className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] mt-1">{stats.newestBuyer.brand}</p>
+                            <p className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)] mt-1 truncate">{stats.newestBuyer.brand}</p>
                             <div className="text-xs text-[var(--color-text-secondary)] mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
                                 <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
                                 <span className="font-semibold text-[var(--color-accent)]">Active</span> account

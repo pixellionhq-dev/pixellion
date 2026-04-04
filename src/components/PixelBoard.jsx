@@ -127,6 +127,10 @@ export default function PixelBoard() {
                         ownerName,
                         ownerLogo: summary?.logoUrl || null,
                         logoUrl: summary?.logoUrl || null,
+                        ownerUrl: summary?.url || null,
+                        fitMode: summary?.fitMode || 'cover',
+                        imageWidth: summary?.imageWidth || null,
+                        imageHeight: summary?.imageHeight || null,
                         ownerPixelCount: summary?.totalPixels || blockArea,
                         ownerRank: summary?.rank || '-',
                         blockArea,
@@ -700,6 +704,25 @@ export default function PixelBoard() {
                 ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
                 ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
                 ctx.setLineDash([]);
+
+                // Highlight owned cells within drag bounds as non-selectable (red)
+                const dragW = maxX - minX + 1;
+                const dragH = maxY - minY + 1;
+                if (dragW * dragH <= 40000) {
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.55)';
+                    for (let dx = minX; dx <= maxX; dx++) {
+                        for (let dy = minY; dy <= maxY; dy++) {
+                            if (ownedMap.has(`${dx},${dy}`)) {
+                                ctx.fillRect(
+                                    (dx - c.x) * c.zoom,
+                                    (dy - c.y) * c.zoom,
+                                    c.zoom,
+                                    c.zoom
+                                );
+                            }
+                        }
+                    }
+                }
             }
 
             // Purchase highlight animation (Feature 11)
@@ -736,7 +759,7 @@ export default function PixelBoard() {
             if (selectedPixels.size > 0 || isDragging || hoveredPixel || purchaseHighlight.current) {
                 requestRedrawRef.current();
             }
-    }, [selectedPixels, hoveredPixel, isDragging, canvasSize, boardToScreen]);
+    }, [selectedPixels, hoveredPixel, isDragging, canvasSize, boardToScreen, ownedMap]);
 
     // --- Single frame scheduler for all board redraw requests ---
     const scheduleRedraw = useCallback(() => {

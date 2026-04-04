@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }) => {
 
                 console.log("✅ USER DATA:", meRes.data);
 
-                if (mounted) setUser(meRes.data);
+                if (mounted) setUser(meRes.data?.data ?? meRes.data);
 
             } catch (err) {
                 console.error("❌ Backend sync failed:", err);
