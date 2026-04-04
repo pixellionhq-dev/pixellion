@@ -131,7 +131,6 @@ function fetchImage(url, retryCount) {
   console.log('[ImageCache] Fetching logo URL:', url);
 
   const img = new Image();
-  img.crossOrigin = "anonymous";
   img.decoding = 'async';
 
   const timeoutId = setTimeout(() => {
@@ -148,14 +147,13 @@ function fetchImage(url, retryCount) {
       return;
     }
 
-    // Try async decode before atlas packing (prevents jank)
+    // Store image directly — skip atlas to avoid OffscreenCanvas taint
+    // (images loaded without crossOrigin would taint the atlas and cause SecurityError)
     const finalize = () => {
-      const rect = packIntoAtlas(img, url);
       const readyEntry = {
         status: 'ready',
         img,
         loadedAt: Date.now(),
-        atlasRect: rect,
         retries: retryCount,
       };
       cache.set(url, readyEntry);

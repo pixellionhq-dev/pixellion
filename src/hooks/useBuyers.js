@@ -6,8 +6,10 @@ export const useLeaderboard = () => {
         queryKey: ['leaderboard'],
         queryFn: getLeaderboard,
         initialData: [],
-        staleTime: 60_000,
+        staleTime: 120_000,
+        gcTime: 300_000,
         refetchOnWindowFocus: false,
+        refetchInterval: 120_000,
     });
 };
 export const useDirectory = (search, country) => {
@@ -15,7 +17,8 @@ export const useDirectory = (search, country) => {
         queryKey: ['buyers', search, country],
         queryFn: () => getDirectory(search, country),
         initialData: [],
-        staleTime: 60_000,
+        staleTime: 120_000,
+        gcTime: 300_000,
         refetchOnWindowFocus: false,
     });
 };
@@ -25,6 +28,8 @@ export const useStats = () => {
         queryFn: getStats,
         initialData: null,
         staleTime: 60_000,
+        gcTime: 300_000,
         refetchOnWindowFocus: false,
+        refetchInterval: 60_000,
     });
 };

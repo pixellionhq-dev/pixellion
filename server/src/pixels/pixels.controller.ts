@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Post,
   UseGuards,
   Request,
@@ -22,6 +23,7 @@ export class PixelsController {
 
   @Public()
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Header('Cache-Control', 'public, max-age=30, stale-while-revalidate=60')
   @Get()
   async getAll(
     @Query('minX') minX?: string,

@@ -542,9 +542,8 @@ export default function PixelBoard() {
                 ctx.stroke();
             }
 
-            // 4. Draw logos — uses shared ImageCache module with atlas support
-            ctx.imageSmoothingEnabled = false;
-            const atlasCanvas = ImageCache.getAtlasCanvas();
+            // 4. Draw logos
+            ctx.imageSmoothingEnabled = true;
             visibleDrawBlocks.forEach(({ block, tl, br, drawW, drawH }) => {
                 const logoToUse = block.ownerLogo || block.logoUrl;
                 if (!logoToUse) return;
@@ -556,27 +555,20 @@ export default function PixelBoard() {
 
                 const entry = ImageCache.load(resolvedLogoUrl);
 
-                if (entry && entry.status === 'ready') {
+                if (entry && entry.status === 'ready' && entry.img) {
                     ctx.fillStyle = '#FFFFFF';
                     ctx.fillRect(tl.x, tl.y, drawW, drawH);
-
-                    // Prefer atlas draw (single GPU texture) when slot is available
-                    if (entry.atlasRect && atlasCanvas) {
-                        const r = entry.atlasRect;
-                        ctx.drawImage(atlasCanvas, r.x, r.y, r.w, r.h, tl.x, tl.y, drawW, drawH);
-                    } else if (entry.img) {
-                        drawLogoWithFit(
-                            ctx,
-                            entry.img,
-                            block.fitMode,
-                            block.imageWidth,
-                            block.imageHeight,
-                            tl.x,
-                            tl.y,
-                            drawW,
-                            drawH
-                        );
-                    }
+                    drawLogoWithFit(
+                        ctx,
+                        entry.img,
+                        block.fitMode,
+                        block.imageWidth,
+                        block.imageHeight,
+                        tl.x,
+                        tl.y,
+                        drawW,
+                        drawH
+                    );
                 } else if (drawW > 20 && drawH > 12) {
                     // Show loading/error placeholder with brand initial
                     const isError = entry && entry.status === 'error';
@@ -606,6 +598,8 @@ export default function PixelBoard() {
                     }
                 }
             });
+
+            ctx.imageSmoothingEnabled = false;
 
             // 5. Faint overlay grid OVER logos (only at close zoom)
             if (cellScreen >= GRID_OVERLAY_MIN_CELL) {

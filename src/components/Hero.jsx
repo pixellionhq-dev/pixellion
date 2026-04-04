@@ -32,13 +32,13 @@ export default function Hero() {
                         <div className="grid grid-cols-3 gap-3 md:gap-6 mt-4 max-w-3xl w-full">
                             <div className="glass-card py-6 px-4 flex flex-col items-center justify-center stagger-1">
                                 <span className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-                                    {stats ? stats.totalPixelsSold.toLocaleString() : <span className="animate-pulse">...</span>}
+                                    {stats?.totalPixelsSold != null ? stats.totalPixelsSold.toLocaleString() : <span className="animate-pulse">...</span>}
                                 </span>
                                 <span className="text-sm font-medium text-[var(--color-text-tertiary)] mt-1">Pixels Claimed</span>
                             </div>
                             <div className="glass-card py-6 px-4 flex flex-col items-center justify-center stagger-2">
                                 <span className="text-2xl md:text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">
-                                    {stats ? stats.totalBuyers.toLocaleString() : <span className="animate-pulse">...</span>}
+                                    {stats?.totalBuyers != null ? stats.totalBuyers.toLocaleString() : <span className="animate-pulse">...</span>}
                                 </span>
                                 <span className="text-sm font-medium text-[var(--color-text-tertiary)] mt-1">Active Brands</span>
                             </div>
@@ -46,7 +46,7 @@ export default function Hero() {
                                 style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #1e293b 100%)',
                                                  boxShadow: '0 8px 32px rgba(37,99,235,0.2)' }}>
                                 <span className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-                                    {stats ? `₹${stats.currentPixelPrice.toLocaleString('en-IN')}` : <span className="animate-pulse">...</span>}
+                                    {stats?.currentPixelPrice != null ? `₹${stats.currentPixelPrice.toLocaleString('en-IN')}` : <span className="animate-pulse">...</span>}
                                 </span>
                                 <span className="text-sm font-medium text-white/60 mt-1">Current Price / px</span>
                             </div>

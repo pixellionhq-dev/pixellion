@@ -16,7 +16,7 @@ export default function App() {
   const [pulseEvents, setPulseEvents] = useState([]);
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
-  const { blocks, setViewport, refresh } = usePixelViewport();
+  const { blocks, brands, setViewport, refresh } = usePixelViewport();
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -42,9 +42,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const brandNameMap = new Map((brands || []).map((b) => [b.brandId, b.brandName]));
     const purchases = (blocks || []).map((block) => ({
       id: block.id,
-      brand: block.brandId || 'Unknown Brand',
+      brand: brandNameMap.get(block.brandId) || block.brandId || 'Unknown Brand',
       pixels: block.width * block.height,
       color: '#2563eb',
     }));
@@ -68,7 +69,7 @@ export default function App() {
       }));
       setPulseEvents((prev) => [...prev, ...createdEvents].slice(-10));
     }
-  }, [blocks]);
+  }, [blocks, brands]);
 
   return (
     <div className="min-h-screen bg-[var(--color-surface)]">
