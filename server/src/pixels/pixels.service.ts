@@ -33,6 +33,18 @@ const r2Client = createR2Client();
 const R2_BUCKET = process.env.R2_BUCKET_NAME || '';
 const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || '').replace(/\/+$/, '');
 
+// Log R2 configuration status at startup
+console.log('[R2] Config check:');
+console.log('[R2]   R2_ENDPOINT set:', !!process.env.R2_ENDPOINT);
+console.log('[R2]   R2_ACCESS_KEY_ID set:', !!process.env.R2_ACCESS_KEY_ID);
+console.log('[R2]   R2_SECRET_ACCESS_KEY set:', !!process.env.R2_SECRET_ACCESS_KEY);
+console.log('[R2]   R2_BUCKET_NAME set:', !!process.env.R2_BUCKET_NAME);
+console.log('[R2]   R2_PUBLIC_URL set:', !!process.env.R2_PUBLIC_URL);
+console.log('[R2]   client ready:', !!r2Client);
+if (process.env.R2_ENDPOINT?.includes('.r2.cloudflarestorage.com/')) {
+  console.warn('[R2] WARNING: R2_ENDPOINT appears to include a bucket name in the path. It must be https://ACCOUNT_ID.r2.cloudflarestorage.com only.');
+}
+
 type Viewport = { minX: number; minY: number; maxX: number; maxY: number };
 
 @Injectable()
@@ -97,19 +109,24 @@ export class PixelsService {
 
     if (file && r2Client) {
       const filename = `${uuidv4()}${extname(file.originalname)}`;
-
-      await r2Client.send(
-        new PutObjectCommand({
-          Bucket: R2_BUCKET,
-          Key: `logos/${filename}`,
-          Body: file.buffer,
-        })
-      );
-
-      logoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
-      console.log('[purchase] logoUrl to save:', logoUrl);
-      if (!R2_PUBLIC_URL) {
-        console.warn('[purchase] WARNING: R2_PUBLIC_URL is not set — logoUrl will be a relative path, logo will not display');
+      try {
+        await r2Client.send(
+          new PutObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: `logos/${filename}`,
+            Body: file.buffer,
+            ContentType: file.mimetype,
+          })
+        );
+        logoUrl = `${R2_PUBLIC_URL}/logos/${filename}`;
+        console.log('[purchase] R2 upload succeeded. logoUrl:', logoUrl);
+        if (!R2_PUBLIC_URL) {
+          console.warn('[purchase] WARNING: R2_PUBLIC_URL is not set — logoUrl is a relative path and will not display');
+        }
+      } catch (r2Err: any) {
+        console.error('[purchase] R2 upload FAILED:', r2Err?.message || r2Err);
+        console.error('[purchase] R2 details — bucket:', R2_BUCKET, '| endpoint:', process.env.R2_ENDPOINT, '| key:', `logos/${filename}`);
+        // Continue without logo rather than failing the whole purchase
       }
     }
 

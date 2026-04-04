@@ -57,7 +57,7 @@ export class BuyersService {
     async getStats() {
         const [totalPixelsSold, totalBuyers, topBuyer, newestBuyer, mostExpensive] = await Promise.all([
             this.prisma.pixel.count(),
-            this.prisma.buyer.count({ where: { pixels: { some: {} } } }),
+            this.prisma.buyer.count({ where: { purchases: { some: {} } } }),
             this.prisma.buyer.findFirst({
                 include: { user: true, _count: { select: { pixels: true } } },
                 orderBy: { pixels: { _count: 'desc' } },

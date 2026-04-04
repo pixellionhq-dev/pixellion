@@ -107,7 +107,7 @@ export default function App() {
             </span>
           </div>
           <p className="text-xs text-[var(--color-text-tertiary)]">
-            © 2024 Pixellion. All rights reserved.
+            © 2026 Pixellion. All rights reserved.
           </p>
         </div>
       </footer>

@@ -173,8 +173,13 @@ export class AuthService {
 
         let user = await this.prisma.user.findUnique({ where: { email }, include: { buyer: true } });
         if (!user) {
-            const providerSuffix = providerId.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toLowerCase();
-            const username = `${email.split('@')[0]}${providerSuffix ? `_${providerSuffix}` : ''}`;
+            // Use clean email prefix; append 4-digit number only if that username is already taken
+            const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            const taken = await this.prisma.user.findUnique({ where: { username: baseUsername } });
+            const username = taken
+                ? `${baseUsername}${Math.floor(1000 + Math.random() * 9000)}`
+                : baseUsername;
+
             try {
                 const result = await this.prisma.$transaction(async (tx) => {
                     const newUser = await tx.user.create({ data: { email, username, passwordHash: '' } });

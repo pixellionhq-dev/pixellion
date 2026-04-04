@@ -1733,15 +1733,6 @@ export default function PixelBoard() {
                     </p>
                 </div>
 
-                {isLoading && (
-                    <div className="w-full aspect-video bg-gray-50/50 backdrop-blur-md rounded-2xl border border-gray-200/50 shadow-sm overflow-hidden relative">
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
-                        <div className="w-full h-full grid grid-cols-12 gap-2 p-6 opacity-20">
-                            {Array.from({ length: 144 }).map((_, i) => <div key={i} className="bg-gray-300 rounded-sm" />)}
-                        </div>
-                    </div>
-                )}
-
                 {/* Canvas viewport */}
                 <div
                     ref={containerRef}
@@ -1777,6 +1768,14 @@ export default function PixelBoard() {
                         }}
                         onDragStart={(e) => e.preventDefault()}
                     />
+                    {isLoading && (
+                        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
+                            <div className="flex flex-col items-center gap-2.5">
+                                <div className="w-7 h-7 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
+                                <span className="text-xs font-medium text-gray-500 tracking-wide">Loading canvas…</span>
+                            </div>
+                        </div>
+                    )}
                     <HeatmapOverlay
                         camera={camera}
                         canvasSize={canvasSize}
