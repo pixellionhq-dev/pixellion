@@ -67,6 +67,16 @@ export default function PurchaseModal({ isOpen, onClose, onSubmit, selectedCount
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            {/* Error banners — shown at top so they're immediately visible */}
+                            {(purchaseError || error) && (
+                                <div className="flex items-start gap-2.5 px-3.5 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 font-medium">
+                                    <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                                    </svg>
+                                    <span>{purchaseError || error}</span>
+                                </div>
+                            )}
+
                             {/* Order Summary */}
                             <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
                                 <div className="flex justify-between items-center mb-2">
@@ -131,14 +141,6 @@ export default function PurchaseModal({ isOpen, onClose, onSubmit, selectedCount
                                     </label>
                                 </div>
                             </div>
-
-                            {error && <p className="text-red-500 text-sm mt-2 font-medium">{error}</p>}
-
-                            {purchaseError && (
-                                <div className="mb-4 mt-4 p-3 bg-red-50 border border-red-100 rounded-lg">
-                                    <p className="text-sm text-red-600 font-medium">{purchaseError}</p>
-                                </div>
-                            )}
 
                             <div className="pt-4 flex flex-col gap-3">
                                 {isPurchasing && uploadProgress > 0 && (

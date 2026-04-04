@@ -1499,6 +1499,15 @@ export default function PixelBoard() {
 
     const handleCheckoutClick = () => {
         if (!user) { setAuthModalOpen(true); return; }
+
+        // Guard: reject if selection overlaps any owned pixel
+        const overlapping = Array.from(selectedPixels).some(key => ownedMap.has(key));
+        if (overlapping) {
+            setToastMessage('Your selection overlaps owned pixels. Please reselect a free area.');
+            setTimeout(() => setToastMessage(null), 4000);
+            return;
+        }
+
         setPurchaseModalOpen(true);
     };
 
@@ -1573,9 +1582,12 @@ export default function PixelBoard() {
         } catch (err) {
             queryClient.setQueryData(['pixels'], backupPixels);
             const timeoutError = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+            const rawMessage = err?.response?.data?.message || '';
             const errorMessage = timeoutError
                 ? 'Purchase request timed out after 30 seconds. Please try again.'
-                : (err?.response?.data?.message || 'Purchase failed. Pixels may already be taken or overlap existing ones.');
+                : /pixels already taken/i.test(rawMessage)
+                    ? 'Some pixels in your selection are already taken. Please choose a different area and try again.'
+                    : (rawMessage || 'Purchase failed. Please try again.');
             setPurchaseError(errorMessage);
             setToastMessage(errorMessage);
             setTimeout(() => setToastMessage(null), 3000);
