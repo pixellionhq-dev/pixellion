@@ -5,6 +5,7 @@ import ShaderBackground from './components/ShaderBackground';
 import HUD from './components/HUD';
 import CommandPalette from './components/CommandPalette';
 import ShaderIntro from './components/ShaderIntro';
+import HeroOverlay from './components/HeroOverlay';
 import usePixelViewport from './store/usePixelViewport';
 
 export default function App() {
@@ -12,6 +13,9 @@ export default function App() {
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [showIntro, setShowIntro] = useState(
     () => !sessionStorage.getItem('px_intro_seen')
+  );
+  const [showHero, setShowHero] = useState(
+    () => !sessionStorage.getItem('px_hero_seen')
   );
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
@@ -70,6 +74,7 @@ export default function App() {
   return (
     <div className="w-screen h-screen overflow-hidden fixed top-0 left-0 bg-transparent z-0">
       {showIntro && <ShaderIntro onDone={() => setShowIntro(false)} />}
+      {!showIntro && showHero && <HeroOverlay onDismiss={() => setShowHero(false)} />}
       <ShaderBackground />
       
       {/* Universal Fullscreen Canvas */}

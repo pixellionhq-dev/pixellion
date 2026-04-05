@@ -10,6 +10,13 @@ import { apiClient } from '../api/client';
  */
 export function resolveLogoUrl(logoPath) {
     if (!logoPath) return '';
+    const resolved = _resolveLogoUrl(logoPath);
+    console.log('[resolveLogoUrl] input:', logoPath, '→ output:', resolved);
+    return resolved;
+}
+
+function _resolveLogoUrl(logoPath) {
+    if (!logoPath) return '';
     if (/^(blob:|data:)/i.test(logoPath)) return logoPath;
 
     const baseURL = apiClient.defaults.baseURL || window.location.origin;

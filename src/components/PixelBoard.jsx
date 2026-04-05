@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePixels } from '../hooks/usePixels';
 import { useAuth } from '../hooks/useAuth';
@@ -98,6 +98,31 @@ export default function PixelBoard({ leaderboardOpen = false }) {
     const rawTooltipY = useMotionValue(-9999);
     const springTooltipX = useSpring(rawTooltipX, { damping: 26, stiffness: 380, mass: 0.35 });
     const springTooltipY = useSpring(rawTooltipY, { damping: 26, stiffness: 380, mass: 0.35 });
+
+    // Smart tooltip positioning — keeps tooltip within viewport + below navbar
+    const TOOLTIP_W = 304;
+    const TOOLTIP_H = 220;
+    const TOOLTIP_OFFSET = 16;
+    const smartTooltipX = useTransform(springTooltipX, v => {
+        const right = v + TOOLTIP_OFFSET + TOOLTIP_W;
+        return right > (typeof window !== 'undefined' ? window.innerWidth : 9999) - 8
+            ? v - TOOLTIP_OFFSET - TOOLTIP_W
+            : v + TOOLTIP_OFFSET;
+    });
+    const smartTooltipY = useTransform(springTooltipY, v => {
+        const NAVBAR_H = 60;
+        const bottom = v + TOOLTIP_OFFSET + TOOLTIP_H;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 9999;
+        if (bottom > vh - 8) return v - TOOLTIP_OFFSET - TOOLTIP_H;
+        const top = v + TOOLTIP_OFFSET;
+        return top < NAVBAR_H ? NAVBAR_H + 4 : top;
+    });
+
+    // Particle burst canvas
+    const burstCanvasRef = useRef(null);
+    const burstParticlesRef = useRef([]);
+    const burstRafRef = useRef(null);
+    const BURST_COLORS = ['#0066CC', '#FF3B30', '#34C759', '#FF9500', '#AF52DE', '#FF2D55'];
 
     // Heatmap toggle
     const [heatmapVisible, setHeatmapVisible] = useState(false);
@@ -460,7 +485,14 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                     const ctx = overlayCanvas.getContext('2d');
                     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
                 }
-                
+                const burstCanvas = burstCanvasRef.current;
+                if (burstCanvas && (burstCanvas.width !== w * dpr || burstCanvas.height !== h * dpr)) {
+                    burstCanvas.width = w * dpr;
+                    burstCanvas.height = h * dpr;
+                    burstCanvas.style.width = `${w}px`;
+                    burstCanvas.style.height = `${h}px`;
+                }
+
                 // Trigger a redraw with the fresh dimensions
                 // Use queueMicrotask to run after this callback but before next paint
                 queueMicrotask(() => requestRedrawRef.current());
@@ -925,6 +957,42 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         return () => ImageCache.setRedrawCallback(null);
     }, [scheduleRedraw]);
 
+    // FIX 7 — Smoothly re-center the board when leaderboard panel opens/closes
+    const prevLeaderboardOpenRef = useRef(leaderboardOpen);
+    useEffect(() => {
+        if (prevLeaderboardOpenRef.current === leaderboardOpen) return;
+        prevLeaderboardOpenRef.current = leaderboardOpen;
+        // Start animation slightly after CSS transition begins (50ms) so canvas size is updating
+        const timer = setTimeout(() => {
+            const { w, h } = canvasSizeRef.current;
+            if (!w || !h) return;
+            const padding = 0.90;
+            const newFitZoom = Math.min(w / BOARD_WIDTH, h / BOARD_HEIGHT) * padding;
+            const endX = BOARD_WIDTH / 2 - (w / newFitZoom) / 2;
+            const endY = BOARD_HEIGHT / 2 - (h / newFitZoom) / 2;
+
+            const c = camera.current;
+            const startX = c.x, startY = c.y, startZoom = c.zoom;
+            const t0 = performance.now();
+            const duration = 380;
+            const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+            const anim = () => {
+                const elapsed = performance.now() - t0;
+                const e = easeInOut(Math.min(1, elapsed / duration));
+                c.x = startX + (endX - startX) * e;
+                c.y = startY + (endY - startY) * e;
+                c.zoom = startZoom + (newFitZoom - startZoom) * e;
+                targetZoom.current = c.zoom;
+                setZoomDisplay(c.zoom);
+                scheduleRedraw();
+                if (elapsed < duration) requestAnimationFrame(anim);
+            };
+            requestAnimationFrame(anim);
+        }, 50);
+        return () => clearTimeout(timer);
+    }, [leaderboardOpen, scheduleRedraw]);
+
     // Preload visible logos whenever pixel data or camera changes
     useEffect(() => {
         if (!precomputedBlocks || precomputedBlocks.length === 0) return;
@@ -944,6 +1012,58 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         scheduleRedraw();
     }, [scheduleRedraw, isDragging, dragStart, dragEnd, hoveredPixel]);
 
+    // --- Particle burst system ---
+    const runBurstLoop = useCallback(() => {
+        const canvas = burstCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const { w, h } = canvasSizeRef.current;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+
+        burstParticlesRef.current = burstParticlesRef.current.filter(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.2;  // gravity
+            p.vx *= 0.97;
+            p.alpha -= 0.022;
+            if (p.alpha <= 0) return false;
+            ctx.globalAlpha = p.alpha;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+            return true;
+        });
+        ctx.globalAlpha = 1;
+
+        if (burstParticlesRef.current.length > 0) {
+            burstRafRef.current = requestAnimationFrame(runBurstLoop);
+        } else {
+            burstRafRef.current = null;
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const triggerBurst = useCallback((screenX, screenY, count = 8) => {
+        const newParticles = Array.from({ length: count }, (_, i) => {
+            const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.9;
+            const speed = 2.5 + Math.random() * 5;
+            return {
+                x: screenX, y: screenY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 1.5,
+                r: 2 + Math.random() * 3.5,
+                alpha: 0.85 + Math.random() * 0.15,
+                color: BURST_COLORS[Math.floor(Math.random() * BURST_COLORS.length)],
+            };
+        });
+        burstParticlesRef.current.push(...newParticles);
+        if (!burstRafRef.current) {
+            burstRafRef.current = requestAnimationFrame(runBurstLoop);
+        }
+    }, [runBurstLoop]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // --- Mini-map navigation callback ---
     const onMiniMapNavigate = useCallback((boardX, boardY) => {
         const c = camera.current;
@@ -955,7 +1075,7 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         scheduleRedraw();
     }, [canvasSize, clampCamera, scheduleRedraw]);
 
-    // --- Zoom-to-purchase navigation (Feature 5 modified) ---
+    // --- Cinematic zoom-to-purchase (3-phase: zoom-out + pan → zoom-in easeOutExpo) ---
     const panToPurchase = useCallback((purchaseId) => {
         if (!ownedPixels || !purchaseId) return;
         const purchasePixels = ownedPixels.filter(p => p.purchaseId === purchaseId || p.ownerId === purchaseId || p.brandId === purchaseId);
@@ -963,44 +1083,54 @@ export default function PixelBoard({ leaderboardOpen = false }) {
 
         const xs = purchasePixels.map(p => p.x);
         const ys = purchasePixels.map(p => p.y);
-        const minX = Math.min(...xs);
-        const maxX = Math.max(...xs);
-        const minY = Math.min(...ys);
-        const maxY = Math.max(...ys);
+        const minX = Math.min(...xs), maxX = Math.max(...xs);
+        const minY = Math.min(...ys), maxY = Math.max(...ys);
+        const bw = maxX - minX + 1, bh = maxY - minY + 1;
+        const centerX = minX + bw / 2, centerY = minY + bh / 2;
 
-        const bw = maxX - minX + 1;
-        const bh = maxY - minY + 1;
-        const centerX = minX + bw / 2;
-        const centerY = minY + bh / 2;
-
-        // Zoom to fit the brand region with padding
         const { w, h } = canvasSize;
         const padding = 2.5;
-        const newZoom = Math.min(MAX_ZOOM, Math.min(w / (bw * padding), h / (bh * padding)));
+        const endZoom = Math.min(MAX_ZOOM, Math.min(w / (bw * padding), h / (bh * padding)));
 
-        // Animate smoothly
         const c = camera.current;
-        const startX = c.x, startY = c.y, startZoom = c.zoom;
-        const endX = centerX - (w / newZoom) / 2;
-        const endY = centerY - (h / newZoom) / 2;
-        const startTime = performance.now();
-        const duration = 600;
+        const startZoom = c.zoom;
+        const startX = c.x, startY = c.y;
+        // Phase 1 zooms out to see more context, panning toward target
+        const midZoom = Math.max(MIN_ZOOM, startZoom * 0.65);
+        const midX = centerX - (w / midZoom) / 2;
+        const midY = centerY - (h / midZoom) / 2;
+        const endX = centerX - (w / endZoom) / 2;
+        const endY = centerY - (h / endZoom) / 2;
+
+        const easeOutExpo = t => t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
+        const easeInOut = t => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        const PHASE1 = 260; // zoom-out + pan
+        const PHASE2 = 490; // zoom-in easeOutExpo
+        const TOTAL = PHASE1 + PHASE2;
+        const t0 = performance.now();
 
         const animatePan = () => {
-            const elapsed = performance.now() - startTime;
-            const t = Math.min(1, elapsed / duration);
-            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const elapsed = performance.now() - t0;
 
-            c.x = startX + (endX - startX) * ease;
-            c.y = startY + (endY - startY) * ease;
-            c.zoom = startZoom + (newZoom - startZoom) * ease;
+            if (elapsed <= PHASE1) {
+                const p = easeInOut(Math.min(1, elapsed / PHASE1));
+                c.zoom = startZoom + (midZoom - startZoom) * p;
+                c.x = startX + (midX - startX) * p;
+                c.y = startY + (midY - startY) * p;
+            } else {
+                const p = easeOutExpo(Math.min(1, (elapsed - PHASE1) / PHASE2));
+                c.zoom = midZoom + (endZoom - midZoom) * p;
+                c.x = midX + (endX - midX) * p;
+                c.y = midY + (endY - midY) * p;
+            }
+
             targetZoom.current = c.zoom;
-
             clampCamera();
-            setZoomDisplay(Math.round(c.zoom * 100));
+            setZoomDisplay(c.zoom);
             scheduleRedraw();
 
-            if (t < 1) requestAnimationFrame(animatePan);
+            if (elapsed < TOTAL) requestAnimationFrame(animatePan);
         };
         requestAnimationFrame(animatePan);
     }, [ownedPixels, canvasSize, clampCamera, scheduleRedraw]);
@@ -1335,12 +1465,15 @@ export default function PixelBoard({ leaderboardOpen = false }) {
 
         if (dragStart && dragEnd) {
             const isClick = dragStart.x === dragEnd.x && dragStart.y === dragEnd.y;
+            let didSelect = false;
             setSelectedPixels(prev => {
                 const key = `${dragStart.x},${dragStart.y}`;
                 if (isClick && getPixelState(dragStart.x, dragStart.y) === 'OWNED') return prev;
 
                 if (isClick) {
-                    return prev.has(key) ? new Set() : new Set([key]);
+                    const next = prev.has(key) ? new Set() : new Set([key]);
+                    if (next.size > 0) didSelect = true;
+                    return next;
                 } else {
                     const minX = Math.min(dragStart.x, dragEnd.x);
                     const maxX = Math.max(dragStart.x, dragEnd.x);
@@ -1365,15 +1498,23 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                             newSet.add(`${x},${y}`);
                         }
                     }
+                    didSelect = true;
                     return newSet;
                 }
             });
+            // Particle burst at the pixel's screen position on selection
+            if (didSelect) {
+                const px = dragStart.x + 0.5;
+                const py = dragStart.y + 0.5;
+                const sc = boardToScreen(px, py);
+                triggerBurst(sc.x, sc.y, 8);
+            }
         }
         setDragStart(null);
         setDragEnd(null);
         currentDragStart.current = null;
         currentDragEnd.current = null;
-    }, [isDragging, dragStart, dragEnd, getPixelState]);
+    }, [isDragging, dragStart, dragEnd, getPixelState, boardToScreen, triggerBurst]);
 
     const handleMouseLeave = useCallback(() => {
         if (hoveredKeyRef.current !== '') {
@@ -1749,6 +1890,9 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                     startTime: performance.now()
                 };
                 scheduleRedraw();
+                // Confetti burst from viewport center
+                const { w: vw, h: vh } = canvasSizeRef.current;
+                triggerBurst(vw / 2, vh / 2, 30);
             }
         } catch (err) {
             queryClient.setQueryData(['pixels'], backupPixels);
@@ -1861,6 +2005,19 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                     }}
                     onDragStart={(e) => e.preventDefault()}
                 />
+                {/* Particle burst canvas — sits above overlay, pointer-events none */}
+                <canvas
+                    ref={burstCanvasRef}
+                    style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: '100%',
+                        height: '100%',
+                        pointerEvents: 'none',
+                        zIndex: 50,
+                    }}
+                />
                 {isLoading && (
                     <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
                         <div className="flex flex-col items-center gap-2.5">
@@ -1907,12 +2064,10 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.88, y: 6 }}
                         transition={{ type: 'spring', damping: 24, stiffness: 420, mass: 0.5 }}
-                        className="fixed z-[100] pointer-events-none"
+                        className="fixed z-[9999] pointer-events-none"
                         style={{
-                            x: springTooltipX,
-                            y: springTooltipY,
-                            translateX: '16px',
-                            translateY: '16px',
+                            x: smartTooltipX,
+                            y: smartTooltipY,
                         }}
                     >
                         {!hoveredPixel.isOwned ? (
@@ -1939,6 +2094,7 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                                         >
                                             {hoveredPixel.logoUrl ? (
                                                 <img
+                                                    crossOrigin="anonymous"
                                                     src={resolveLogoUrlUtil(hoveredPixel.logoUrl)}
                                                     alt={hoveredPixel.ownerName}
                                                     className="w-full h-full object-cover"
@@ -2078,6 +2234,7 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                             >
                                 {focusedBrand.logoUrl ? (
                                     <img
+                                        crossOrigin="anonymous"
                                         src={resolveLogoUrlUtil(focusedBrand.logoUrl)}
                                         alt={focusedBrand.ownerName}
                                         className="w-full h-full object-cover"

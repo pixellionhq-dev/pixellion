@@ -23,12 +23,15 @@ const Leaderboard = memo(function Leaderboard({ isHUD }) {
                             if (entry.rank === 1) rankDisplay = <span className="text-sm">🥇</span>;
                             if (entry.rank === 2) rankDisplay = <span className="text-sm">🥈</span>;
                             if (entry.rank === 3) rankDisplay = <span className="text-sm">🥉</span>;
-                            
+
                             const progress = Math.max(0, Math.min(100, (entry.pixels / maxPixels) * 100));
 
                             return (
                                 <motion.div
                                     key={entry.brand}
+                                    initial={{ opacity: 0, x: -8 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: index * 0.04, duration: 0.25, ease: 'easeOut' }}
                                     whileHover={{ backgroundColor: 'var(--color-surface-hover)' }}
                                     onClick={() => document.dispatchEvent(new CustomEvent('map:zoomToBrand', { detail: entry.brand }))}
                                     className="flex items-center gap-3 px-5 py-3 cursor-pointer group"
