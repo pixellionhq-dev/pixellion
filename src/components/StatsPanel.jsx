@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { useStats } from '../hooks/useBuyers';
 import Card from './ui/Card';
 
-export default function StatsPanel({ isHUD }) {
+const StatsPanel = memo(function StatsPanel({ isHUD }) {
     const { data: stats } = useStats();
 
     if (!stats) return null;
@@ -37,4 +38,6 @@ export default function StatsPanel({ isHUD }) {
     }
 
     return null;
-}
+});
+
+export default StatsPanel;

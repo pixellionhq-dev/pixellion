@@ -4,10 +4,14 @@ import Pulse from './components/Pulse';
 import ShaderBackground from './components/ShaderBackground';
 import HUD from './components/HUD';
 import CommandPalette from './components/CommandPalette';
+import ShaderIntro from './components/ShaderIntro';
 import usePixelViewport from './store/usePixelViewport';
 
 export default function App() {
   const [pulseEvents, setPulseEvents] = useState([]);
+  const [showIntro, setShowIntro] = useState(
+    () => !sessionStorage.getItem('px_intro_seen')
+  );
   const knownPurchaseIds = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
   const { blocks, brands, refresh } = usePixelViewport();
@@ -64,6 +68,7 @@ export default function App() {
 
   return (
     <div className="w-screen h-screen overflow-hidden fixed top-0 left-0 bg-transparent z-0">
+      {showIntro && <ShaderIntro onDone={() => setShowIntro(false)} />}
       <ShaderBackground />
       
       {/* Universal Fullscreen Canvas */}

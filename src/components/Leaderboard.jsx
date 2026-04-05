@@ -1,7 +1,8 @@
+import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { useLeaderboard } from '../hooks/useBuyers';
 
-export default function Leaderboard({ isHUD }) {
+const Leaderboard = memo(function Leaderboard({ isHUD }) {
     const { data: leaderboardData } = useLeaderboard();
     const maxPixels = leaderboardData?.[0]?.pixels || 1;
 
@@ -148,4 +149,6 @@ export default function Leaderboard({ isHUD }) {
             </div>
         </section>
     );
-}
+});
+
+export default Leaderboard;

@@ -53,11 +53,16 @@ export default function Navbar({ onToggleLeaderboard }) {
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => document.dispatchEvent(new CustomEvent('map:zoomToBrand', { detail: user.username }))}>
                                     {user.buyer && (
-                                        <div className="w-5 h-5 rounded-[4px]" style={{ backgroundColor: user.buyer.color }} />
+                                        <div className="w-5 h-5 rounded-[4px] flex-shrink-0" style={{ backgroundColor: user.buyer.color }} />
                                     )}
                                     <span className="text-xs font-semibold text-[var(--color-text-primary)]">
                                         {user.username}
                                     </span>
+                                    {user.buyer?.pixelCount > 0 && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white leading-none">
+                                            {user.buyer.pixelCount.toLocaleString()}px
+                                        </span>
+                                    )}
                                 </div>
                                 <button
                                     onClick={logout}

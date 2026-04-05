@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDirectory } from '../hooks/useBuyers';
 import Card from './ui/Card';
 
 const COUNTRIES = ['All', 'US', 'KR', 'SE', 'CA', 'GB', 'AU', 'JP', 'DE', 'FR'];
 
-export default function BuyerDirectory() {
+const BuyerDirectory = memo(function BuyerDirectory() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCountry, setSelectedCountry] = useState('All');
 
@@ -120,4 +120,6 @@ export default function BuyerDirectory() {
             </div>
         </section>
     );
-}
+});
+
+export default BuyerDirectory;

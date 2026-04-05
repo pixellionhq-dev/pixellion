@@ -10,17 +10,27 @@
   --color-text-primary: #0a0a0a;
   --color-text-secondary: #52525b;
   --color-text-tertiary: #a1a1aa;
-  --color-accent: #2563eb;
+  --color-accent: #0066CC;
+  --color-accent-hover: #0055B3;
   --color-accent-subtle: #eff6ff;
-  --color-glow: rgba(37, 99, 235, 0.4);
+  --color-glow: rgba(0, 102, 204, 0.4);
   --color-pixel-empty: #f3f4f6;
   --color-pixel-owned: #1e293b;
   --color-pixel-hover: #dbeafe;
-  --color-pixel-selected: #3b82f6;
-  --font-sans: 'Geist', -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --radius-card: 32px;
+  --color-pixel-selected: #0066CC;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+  --radius-card: 20px;
+  --radius-panel: 20px;
+  --radius-btn: 10px;
   --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 20px 40px -10px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   --shadow-hover: 0 8px 12px -2px rgba(0, 0, 0, 0.03), 0 32px 56px -12px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --color-primary: #000000;
+  --color-secondary: #6E6E73;
+  --transition-smooth: 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 @layer base {
@@ -81,25 +91,26 @@
 
 @layer components {
   .glass-card {
-    background: rgba(255,255,255,0.7);
-    backdrop-filter: blur(40px) saturate(200%);
-    -webkit-backdrop-filter: blur(40px) saturate(200%);
-    border: 1px solid rgba(255,255,255,0.6);
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-card);
-    box-shadow: var(--shadow-card);
-    transition: box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.16,1,0.3,1);
+    box-shadow: var(--glass-shadow);
+    transition: box-shadow var(--transition-smooth), transform var(--transition-smooth);
+    will-change: transform;
   }
 
   .glass-card:hover {
     box-shadow: var(--shadow-hover);
-    transform: translateY(-2px);
+    transform: translateY(-1px);
   }
 
   .glass-navbar {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(40px) saturate(200%);
-    -webkit-backdrop-filter: blur(40px) saturate(200%);
-    border-bottom: 1px solid var(--color-border-subtle);
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid var(--glass-border);
   }
 
   .stat-card {
@@ -316,4 +327,52 @@
 
 .animate-slide-in {
   animation: slideIn 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.96) translateX(-50%); }
+  to   { opacity: 1; transform: scale(1)    translateX(-50%); }
+}
+
+.animate-scale-in {
+  animation: scaleIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Glass input */
+.glass-input {
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 10px;
+  transition: border-color var(--transition-smooth), box-shadow var(--transition-smooth);
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(0,102,204,0.12);
+}
+
+/* Primary button */
+.btn-primary {
+  background: #000;
+  color: #fff;
+  border-radius: var(--radius-btn);
+  font-weight: 500;
+  transition: background var(--transition-smooth), transform var(--transition-smooth);
+}
+
+.btn-primary:hover {
+  background: #333;
+  transform: scale(1.01);
 }

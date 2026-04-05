@@ -86,6 +86,7 @@ export default function PixelBoard() {
     const { user } = useAuth();
     const [isProcessing, setIsProcessing] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
+    const [focusedBrand, setFocusedBrand] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 });
     const canvasSizeRef = useRef(canvasSize);
@@ -453,18 +454,46 @@ export default function PixelBoard() {
         return () => ro.disconnect();
     }, []);
 
-    // Fit on first meaningful size
+    // Fit on first meaningful size — animate zoom from 0.25 → fitZoom over 1200ms (easeOutExpo)
     const hasInitialized = useRef(false);
     useEffect(() => {
         if (canvasSize.w > 100 && canvasSize.h > 100 && !hasInitialized.current) {
             hasInitialized.current = true;
-            fitToViewport();
-            // Kick off the first pixel data fetch immediately
+
+            const { w, h } = canvasSize;
+            const padding = 0.90;
+            const fitZoom = Math.min(w / BOARD_WIDTH, h / BOARD_HEIGHT) * padding;
+
+            // Position camera centered on board (at fitZoom) then start at zoom 0.25
+            camera.current.x = BOARD_WIDTH / 2 - w / fitZoom / 2;
+            camera.current.y = BOARD_HEIGHT / 2 - h / fitZoom / 2;
+            camera.current.zoom = 0.25;
+            targetZoom.current = 0.25;
+
             queueViewportFetch(true);
-            // Use setTimeout to ensure requestRedrawRef has been synced by other effects
             setTimeout(() => requestRedrawRef.current(), 0);
+
+            // Animate to fitZoom
+            const startZoom = 0.25;
+            const endZoom = fitZoom;
+            const duration = 1200;
+            const t0 = performance.now();
+            const easeOutExpo = (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+
+            const anim = () => {
+                const t = Math.min(1, (performance.now() - t0) / duration);
+                const z = startZoom + (endZoom - startZoom) * easeOutExpo(t);
+                camera.current.x = BOARD_WIDTH / 2 - w / z / 2;
+                camera.current.y = BOARD_HEIGHT / 2 - h / z / 2;
+                camera.current.zoom = z;
+                targetZoom.current = z;
+                setZoomDisplay(z);
+                requestRedrawRef.current();
+                if (t < 1) requestAnimationFrame(anim);
+            };
+            requestAnimationFrame(anim);
         }
-    }, [canvasSize, fitToViewport, queueViewportFetch]);
+    }, [canvasSize, queueViewportFetch]);
 
 
     // --- Draw base board (grid + owned pixels + logos) ---
@@ -1100,20 +1129,23 @@ export default function PixelBoard() {
         const key = `${pixel.x},${pixel.y}`;
         const owner = ownedMap.get(key);
 
-        if (owner && owner.ownerUrl) {
-            window.open(owner.ownerUrl, '_blank', 'noopener,noreferrer');
+        if (owner) {
+            // Show brand focus card and zoom to this block
+            setFocusedBrand(owner);
+            panToPurchase(owner.purchaseId);
             return;
         }
 
-        if (!owner) {
-            setIsDragging(true);
-            isDraggingRef.current = true;
-            setDragStart(pixel);
-            setDragEnd(pixel);
-            currentDragStart.current = pixel;
-            currentDragEnd.current = pixel;
-        }
-    }, [getPixelFromEvent, ownedMap]);
+        // Clicking empty space — close any open brand card
+        setFocusedBrand(null);
+
+        setIsDragging(true);
+        isDraggingRef.current = true;
+        setDragStart(pixel);
+        setDragEnd(pixel);
+        currentDragStart.current = pixel;
+        currentDragEnd.current = pixel;
+    }, [getPixelFromEvent, ownedMap, panToPurchase]);
 
     const handleMouseMove = useCallback((e) => {
         e.preventDefault();
@@ -1845,6 +1877,82 @@ export default function PixelBoard() {
                 onSubmit={handlePurchase} selectedCount={selectedPixels.size} pricePerPixel={100} isPurchasing={isProcessing}
                 purchaseError={purchaseError} setPurchaseError={setPurchaseError} uploadProgress={uploadProgress}
             />
+
+            {/* Brand Focus Mode — dim overlay */}
+            <AnimatePresence>
+                {focusedBrand && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ background: 'rgba(0,0,0,0.12)' }}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Brand Focus Mode — brand card */}
+            <AnimatePresence>
+                {focusedBrand && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 16, scale: 0.97 }}
+                        transition={{ type: 'spring', damping: 26, stiffness: 340, mass: 0.7 }}
+                        className="absolute bottom-28 left-1/2 z-[80] pointer-events-auto"
+                        style={{ transform: 'translateX(-50%)', width: 'min(400px, 90vw)' }}
+                    >
+                        <div className="glass-card rounded-2xl px-5 py-4 flex items-center gap-4 relative" onClick={e => e.stopPropagation()}>
+                            {/* Close button */}
+                            <button
+                                onClick={() => { setFocusedBrand(null); fitToViewport(); }}
+                                className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                            >
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M1 1l10 10M11 1L1 11"/>
+                                </svg>
+                            </button>
+
+                            {/* Logo */}
+                            <div
+                                className="w-12 h-12 rounded-full flex-shrink-0 border border-black/08 shadow-sm overflow-hidden"
+                                style={{
+                                    backgroundColor: '#e5e7eb',
+                                    backgroundImage: focusedBrand.logoUrl ? `url(${focusedBrand.logoUrl})` : 'none',
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
+                                }}
+                            />
+
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                                <p className="font-bold text-[var(--color-text-primary)] text-base truncate leading-tight">
+                                    {focusedBrand.ownerName || 'Brand'}
+                                </p>
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                                    {(focusedBrand.ownerPixelCount || focusedBrand.blockArea || 1).toLocaleString()} pixels owned
+                                </p>
+                            </div>
+
+                            {/* Visit button */}
+                            {focusedBrand.ownerUrl && (
+                                <a
+                                    href={focusedBrand.ownerUrl.startsWith('http') ? focusedBrand.ownerUrl : `https://${focusedBrand.ownerUrl}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex-shrink-0 px-3.5 py-2 bg-black text-white text-xs font-semibold rounded-lg hover:bg-gray-800 transition-colors flex items-center gap-1.5"
+                                >
+                                    Visit
+                                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                        <path d="M1 9L9 1M9 1H3M9 1v6"/>
+                                    </svg>
+                                </a>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
