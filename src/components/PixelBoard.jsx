@@ -1020,33 +1020,6 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         return () => document.removeEventListener('map:zoomToBrand', handler);
     }, [panToPurchase, ownedPixels]);
 
-    // --- Leaderboard open/close: shift camera so board stays centered in remaining space ---
-    const leaderboardOpenRef = useRef(leaderboardOpen);
-    useEffect(() => {
-        const prevOpen = leaderboardOpenRef.current;
-        leaderboardOpenRef.current = leaderboardOpen;
-        if (prevOpen === leaderboardOpen) return;
-
-        // Leaderboard drawer is 384px wide (w-96); shift board by half of that
-        const SHIFT_PX = 192;
-        const c = camera.current;
-        const shift = SHIFT_PX / c.zoom;
-        // Opening: board shifts right (camera.x decreases), closing: reverse
-        const startX = c.x;
-        const endX = leaderboardOpen ? c.x - shift : c.x + shift;
-        const t0 = performance.now();
-        const dur = 350;
-
-        const animate = () => {
-            const t = Math.min(1, (performance.now() - t0) / dur);
-            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-            c.x = startX + (endX - startX) * ease;
-            requestRedrawRef.current();
-            if (t < 1) requestAnimationFrame(animate);
-        };
-        requestAnimationFrame(animate);
-    }, [leaderboardOpen]);
-
     // --- Zoom animation ---
     const animateZoom = useCallback(() => {
         const c = camera.current;
@@ -1409,6 +1382,18 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         }
     }, []);
 
+    // Double-click on owned pixel → open brand URL in new tab
+    const handleDoubleClick = useCallback((e) => {
+        const pixel = getPixelFromEvent(e);
+        if (!pixel) return;
+        const key = `${pixel.x},${pixel.y}`;
+        const owner = ownedMap.get(key);
+        if (owner?.ownerUrl) {
+            const url = owner.ownerUrl.startsWith('http') ? owner.ownerUrl : `https://${owner.ownerUrl}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+    }, [getPixelFromEvent, ownedMap]);
+
     // ── Mobile gesture helpers ────────────────────────────────────────────
     const touchDist = useCallback((t1, t2) => {
         const dx = t1.clientX - t2.clientX;
@@ -1659,6 +1644,7 @@ export default function PixelBoard({ leaderboardOpen = false }) {
             window.addEventListener('mouseup', handleMouseUp);
         }
         canvas.addEventListener('pointerleave', handleMouseLeave);
+        canvas.addEventListener('dblclick', handleDoubleClick);
 
         return () => {
             canvas.removeEventListener('touchstart', handleTouchStart);
@@ -1678,8 +1664,9 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                 window.removeEventListener('mouseup', handleMouseUp);
             }
             canvas.removeEventListener('pointerleave', handleMouseLeave);
+            canvas.removeEventListener('dblclick', handleDoubleClick);
         };
-    }, [handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave, handleTouchStart, handleTouchMove, handleTouchEnd]);
+    }, [handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave, handleTouchStart, handleTouchMove, handleTouchEnd, handleDoubleClick]);
 
     const handleCheckoutClick = () => {
         if (!user) { setAuthModalOpen(true); return; }
@@ -1831,11 +1818,19 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                 )}
             </AnimatePresence>
 
-            {/* Canvas viewport */}
+            {/* Canvas viewport — left edge shifts right when leaderboard is open */}
             <div
                 ref={containerRef}
-                className="absolute inset-0 w-full h-full"
-                style={{ background: 'transparent' }}
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    // Leaderboard: left-6 (24px) + w-[300px] = 324px right edge
+                    left: leaderboardOpen ? 324 : 0,
+                    transition: 'left 380ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                    background: 'transparent',
+                }}
             >
                 <canvas
                     ref={canvasRef}
@@ -1979,7 +1974,7 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                                     <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
                                         <span className="text-[10px] font-mono text-gray-400">{hoveredPixel.x}, {hoveredPixel.y}</span>
                                         <span className="text-[11px] font-semibold text-indigo-500 flex items-center gap-1">
-                                            Click to explore
+                                            Double-click to visit
                                             <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5">
                                                 <path d="M1 8L8 1M8 1H3M8 1v5"/>
                                             </svg>

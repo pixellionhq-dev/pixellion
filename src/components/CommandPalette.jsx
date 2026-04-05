@@ -193,7 +193,14 @@ export default function CommandPalette({ onSelectBrand }) {
                                     </div>
                                 )}
                                 <ul ref={listRef} className="max-h-72 overflow-y-auto py-1 custom-scrollbar">
-                                    {allItems.map((brand, i) => (
+                                    {allItems.map((brand, i) => {
+                                        const initials = (brand.brandName || '?').slice(0, 2).toUpperCase();
+                                        // Generate a consistent hue from brand name
+                                        const hue = [...(brand.brandName || '')].reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
+                                        const logoColor = `hsl(${hue}, 55%, 52%)`;
+                                        const resolvedLogo = brand.logoUrl ? resolveLogoUrl(brand.logoUrl) : null;
+                                        if (resolvedLogo) console.log(`[CMD+K] ${brand.brandName}: raw=${brand.logoUrl} → resolved=${resolvedLogo}`);
+                                        return (
                                         <li
                                             key={brand.brandId || brand.brandName}
                                             onMouseEnter={() => setSelectedIndex(i)}
@@ -201,20 +208,26 @@ export default function CommandPalette({ onSelectBrand }) {
                                             className={`px-4 py-2.5 cursor-pointer flex items-center justify-between gap-3 transition-colors ${i === selectedIndex ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
                                         >
                                             <div className="flex items-center gap-3 min-w-0">
-                                                {/* Brand logo */}
+                                                {/* Brand logo — initials always visible, img covers if it loads */}
                                                 <div
-                                                    className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden border border-black/5 shadow-sm flex items-center justify-center text-white text-[10px] font-bold"
-                                                    style={{ backgroundColor: brand.color || '#6366f1' }}
+                                                    className="relative w-7 h-7 rounded-full flex-shrink-0 overflow-hidden border border-black/5 shadow-sm"
+                                                    style={{ backgroundColor: logoColor }}
                                                 >
-                                                    {brand.logoUrl ? (
+                                                    {/* Initials fallback — always rendered underneath */}
+                                                    <span className="absolute inset-0 flex items-center justify-center text-white text-[10px] font-bold select-none">
+                                                        {initials}
+                                                    </span>
+                                                    {/* Logo image — covers initials when it loads */}
+                                                    {resolvedLogo && (
                                                         <img
-                                                            src={resolveLogoUrl(brand.logoUrl)}
+                                                            src={resolvedLogo}
                                                             alt={brand.brandName}
-                                                            className="w-full h-full object-cover"
-                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                            className="absolute inset-0 w-full h-full object-cover"
+                                                            onError={(e) => {
+                                                                console.warn(`[CMD+K] Logo load failed for ${brand.brandName}: ${resolvedLogo}`);
+                                                                e.currentTarget.style.display = 'none';
+                                                            }}
                                                         />
-                                                    ) : (
-                                                        (brand.brandName || '?').slice(0, 2).toUpperCase()
                                                     )}
                                                 </div>
                                                 <span className="font-medium text-[var(--color-text-primary)] text-sm truncate">
@@ -230,7 +243,8 @@ export default function CommandPalette({ onSelectBrand }) {
                                                 )}
                                             </div>
                                         </li>
-                                    ))}
+                                        );
+                                    })}
                                 </ul>
                             </div>
                         )}

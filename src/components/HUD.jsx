@@ -26,7 +26,7 @@ export default function HUD({ leaderboardOpen, onToggleLeaderboard }) {
                         exit={{ x: '-100%', opacity: 0 }}
                         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                         style={{ willChange: 'transform, opacity' }}
-                        className="absolute top-24 left-6 bottom-6 w-96 pointer-events-auto z-40 rounded-[32px] overflow-hidden glass-card shadow-2xl flex flex-col border border-[var(--color-border-subtle)]"
+                        className="absolute top-24 left-6 bottom-6 w-[300px] pointer-events-auto z-40 rounded-[32px] overflow-hidden glass-card shadow-2xl flex flex-col border border-[var(--color-border-subtle)]"
                     >
                         <div className="flex-1 overflow-y-auto custom-scrollbar bg-white/40">
                              <Leaderboard isHUD={true} />
