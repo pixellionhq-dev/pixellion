@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useSpring } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePixels } from '../hooks/usePixels';
 import { useAuth } from '../hooks/useAuth';
@@ -13,6 +13,7 @@ import Input from './ui/Input';
 import { apiClient } from '../api/client';
 import usePixelViewport from '../store/usePixelViewport';
 import * as ImageCache from '../utils/imageCache';
+import { resolveLogoUrl as resolveLogoUrlUtil } from '../utils/resolveLogoUrl';
 import {
     BOARD_WIDTH, BOARD_HEIGHT,
     GRID_LEVELS, GRID_OVERLAY_COLOR, GRID_OVERLAY_MIN_CELL,
@@ -37,7 +38,7 @@ function getDomain(url) {
     }
 }
 
-export default function PixelBoard() {
+export default function PixelBoard({ leaderboardOpen = false }) {
     const queryClient = useQueryClient();
     const canvasRef = useRef(null);
     const overlayCanvasRef = useRef(null);
@@ -91,6 +92,12 @@ export default function PixelBoard() {
     const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 });
     const canvasSizeRef = useRef(canvasSize);
     canvasSizeRef.current = canvasSize;
+
+    // Spring-physics tooltip position (zero re-renders on mousemove)
+    const rawTooltipX = useMotionValue(-9999);
+    const rawTooltipY = useMotionValue(-9999);
+    const springTooltipX = useSpring(rawTooltipX, { damping: 26, stiffness: 380, mass: 0.35 });
+    const springTooltipY = useSpring(rawTooltipY, { damping: 26, stiffness: 380, mass: 0.35 });
 
     // Heatmap toggle
     const [heatmapVisible, setHeatmapVisible] = useState(false);
@@ -193,6 +200,15 @@ export default function PixelBoard() {
 
         return Array.from(groups.values());
     }, [ownedPixels]);
+
+    // Fast lookup: purchaseId → block bounds (for hover glow)
+    const blockByPurchaseId = useMemo(() => {
+        const map = new Map();
+        precomputedBlocks.forEach(b => map.set(b.groupId, b));
+        return map;
+    }, [precomputedBlocks]);
+    const blockByPurchaseIdRef = useRef(blockByPurchaseId);
+    useEffect(() => { blockByPurchaseIdRef.current = blockByPurchaseId; }, [blockByPurchaseId]);
 
     const redrawFrame = useRef(null);
     const requestRedrawRef = useRef(() => { });
@@ -711,19 +727,75 @@ export default function PixelBoard() {
             ctx.clearRect(0, 0, w, h);
             const c = camera.current;
 
-            // Hover glow
+            // Hover glow — block-level pulsing rings for owned pixels, dashed for free
             if (hoveredPixel && !isDragging) {
-                const tl = boardToScreen(hoveredPixel.x, hoveredPixel.y);
-                const br = boardToScreen(hoveredPixel.x + 1, hoveredPixel.y + 1);
-                ctx.save();
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = HOVER_GLOW_COLOR;
-                ctx.strokeStyle = HOVER_BORDER_COLOR;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.lineDashOffset = -(performance.now() / 50);
-                ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
-                ctx.restore();
+                const now = performance.now();
+                if (hoveredPixel.isOwned) {
+                    // Find full block bounds
+                    const block = blockByPurchaseIdRef.current.get(hoveredPixel.purchaseId);
+                    const bMinX = block ? block.minX : hoveredPixel.x;
+                    const bMinY = block ? block.minY : hoveredPixel.y;
+                    const bMaxX = block ? block.maxX : hoveredPixel.x;
+                    const bMaxY = block ? block.maxY : hoveredPixel.y;
+
+                    const tl = boardToScreen(bMinX, bMinY);
+                    const br = boardToScreen(bMaxX + 1, bMaxY + 1);
+                    const bw = br.x - tl.x;
+                    const bh = br.y - tl.y;
+                    const cx = tl.x + bw / 2;
+                    const cy = tl.y + bh / 2;
+
+                    ctx.save();
+
+                    // Outer glow halo
+                    const glowSize = 18 + Math.sin(now / 600) * 4;
+                    const glowGrad = ctx.createRadialGradient(cx, cy, Math.max(bw, bh) * 0.3, cx, cy, Math.max(bw, bh) * 0.7 + glowSize);
+                    glowGrad.addColorStop(0, 'rgba(99, 102, 241, 0)');
+                    glowGrad.addColorStop(1, 'rgba(99, 102, 241, 0.18)');
+                    ctx.fillStyle = glowGrad;
+                    ctx.fillRect(tl.x - glowSize, tl.y - glowSize, bw + glowSize * 2, bh + glowSize * 2);
+
+                    // Solid block outline with glow
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = 'rgba(99, 102, 241, 0.7)';
+                    ctx.strokeStyle = 'rgba(99, 102, 241, 0.95)';
+                    ctx.lineWidth = 2.5;
+                    ctx.setLineDash([]);
+                    ctx.strokeRect(tl.x, tl.y, bw, bh);
+                    ctx.shadowBlur = 0;
+
+                    // Pulsing concentric rings (3 rings, staggered)
+                    for (let ring = 0; ring < 3; ring++) {
+                        const phase = (now / 1200 + ring * 0.33) % 1;
+                        const expand = phase * (28 + ring * 8);
+                        const alpha = (1 - phase) * (0.55 - ring * 0.12);
+                        if (alpha <= 0) continue;
+                        ctx.strokeStyle = `rgba(99, 102, 241, ${alpha})`;
+                        ctx.lineWidth = 1.5 - ring * 0.3;
+                        ctx.setLineDash([]);
+                        ctx.strokeRect(
+                            tl.x - expand,
+                            tl.y - expand,
+                            bw + expand * 2,
+                            bh + expand * 2
+                        );
+                    }
+
+                    ctx.restore();
+                } else {
+                    // Available pixel — dashed border only
+                    const tl = boardToScreen(hoveredPixel.x, hoveredPixel.y);
+                    const br = boardToScreen(hoveredPixel.x + 1, hoveredPixel.y + 1);
+                    ctx.save();
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = 'rgba(37, 99, 235, 0.4)';
+                    ctx.strokeStyle = 'rgba(37, 99, 235, 0.8)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 4]);
+                    ctx.lineDashOffset = -(now / 50);
+                    ctx.strokeRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+                    ctx.restore();
+                }
             }
 
             // Selected pixels (bounding rect)
@@ -886,7 +958,7 @@ export default function PixelBoard() {
     // --- Zoom-to-purchase navigation (Feature 5 modified) ---
     const panToPurchase = useCallback((purchaseId) => {
         if (!ownedPixels || !purchaseId) return;
-        const purchasePixels = ownedPixels.filter(p => p.purchaseId === purchaseId || p.ownerId === purchaseId);
+        const purchasePixels = ownedPixels.filter(p => p.purchaseId === purchaseId || p.ownerId === purchaseId || p.brandId === purchaseId);
         if (purchasePixels.length === 0) return;
 
         const xs = purchasePixels.map(p => p.x);
@@ -938,10 +1010,42 @@ export default function PixelBoard() {
         const handler = (e) => {
             const purchaseId = e.detail;
             panToPurchase(purchaseId);
+            // Also open brand focus card for the matched brand
+            const matchedPixel = ownedPixels.find(
+                p => p.purchaseId === purchaseId || p.ownerId === purchaseId || p.brandId === purchaseId
+            );
+            if (matchedPixel) setFocusedBrand(matchedPixel);
         };
         document.addEventListener('map:zoomToBrand', handler);
         return () => document.removeEventListener('map:zoomToBrand', handler);
-    }, [panToPurchase]);
+    }, [panToPurchase, ownedPixels]);
+
+    // --- Leaderboard open/close: shift camera so board stays centered in remaining space ---
+    const leaderboardOpenRef = useRef(leaderboardOpen);
+    useEffect(() => {
+        const prevOpen = leaderboardOpenRef.current;
+        leaderboardOpenRef.current = leaderboardOpen;
+        if (prevOpen === leaderboardOpen) return;
+
+        // Leaderboard drawer is 384px wide (w-96); shift board by half of that
+        const SHIFT_PX = 192;
+        const c = camera.current;
+        const shift = SHIFT_PX / c.zoom;
+        // Opening: board shifts right (camera.x decreases), closing: reverse
+        const startX = c.x;
+        const endX = leaderboardOpen ? c.x - shift : c.x + shift;
+        const t0 = performance.now();
+        const dur = 350;
+
+        const animate = () => {
+            const t = Math.min(1, (performance.now() - t0) / dur);
+            const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            c.x = startX + (endX - startX) * ease;
+            requestRedrawRef.current();
+            if (t < 1) requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+    }, [leaderboardOpen]);
 
     // --- Zoom animation ---
     const animateZoom = useCallback(() => {
@@ -1201,6 +1305,8 @@ export default function PixelBoard() {
             if (lastTooltipPosRef.current.x !== e.clientX || lastTooltipPosRef.current.y !== e.clientY) {
                 lastTooltipPosRef.current = { x: e.clientX, y: e.clientY };
                 setTooltipPos(lastTooltipPosRef.current);
+                rawTooltipX.set(e.clientX);
+                rawTooltipY.set(e.clientY);
             }
 
             const owner = ownedMap.get(key);
@@ -1797,38 +1903,94 @@ export default function PixelBoard() {
                 </div>
             )}
 
-            {/* Hover tooltip */}
-            {hoveredPixel && (
-                <div className="fixed z-[100] pointer-events-none" style={{ left: tooltippos.x + 12, top: tooltippos.y + 12 }}>
-                    {!hoveredPixel.isOwned ? (
-                        <div className="bg-white/90 backdrop-blur-md rounded-xl px-4 py-2.5 shadow-lg border border-white/40">
-                            <div className="flex items-center gap-3">
+            {/* Hover tooltip — spring-physics premium glass card */}
+            <AnimatePresence mode="wait">
+                {hoveredPixel && (
+                    <motion.div
+                        key={hoveredPixel.isOwned ? `owned-${hoveredPixel.purchaseId}` : `free-${hoveredPixel.x}-${hoveredPixel.y}`}
+                        initial={{ opacity: 0, scale: 0.88, y: 6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.88, y: 6 }}
+                        transition={{ type: 'spring', damping: 24, stiffness: 420, mass: 0.5 }}
+                        className="fixed z-[100] pointer-events-none"
+                        style={{
+                            x: springTooltipX,
+                            y: springTooltipY,
+                            translateX: '16px',
+                            translateY: '16px',
+                        }}
+                    >
+                        {!hoveredPixel.isOwned ? (
+                            <div className="bg-white/95 backdrop-blur-xl rounded-2xl px-4 py-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.12)] border border-white/60 flex items-center gap-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                 <span className="font-mono text-[11px] text-gray-400 tracking-tight">{hoveredPixel.x}, {hoveredPixel.y}</span>
-                                <span className="w-px h-3 bg-gray-200"></span>
+                                <span className="w-px h-3 bg-gray-200" />
                                 <span className="text-xs font-semibold text-emerald-600">Available</span>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="bg-white/95 backdrop-blur-md border border-gray-200 shadow-xl rounded-xl p-3.5 text-sm text-gray-800 min-w-[220px]">
-                            <p className="font-bold text-gray-900 mb-1.5 leading-tight text-[15px]">{hoveredPixel.ownerName || 'Claimed Space'}</p>
-                            {hoveredPixel.ownerUrl && (
-                                <p className="text-[11px] text-blue-500 font-medium mb-2 truncate">
-                                    {(() => { try { return new URL(hoveredPixel.ownerUrl.startsWith('http') ? hoveredPixel.ownerUrl : 'https://' + hoveredPixel.ownerUrl).hostname; } catch { return hoveredPixel.ownerUrl; } })()}
-                                </p>
-                            )}
-                            <div className="space-y-0.5 mb-2">
-                                <p className="text-xs text-gray-500">Pixels owned: <span className="font-semibold text-gray-700">{hoveredPixel.ownerPixelCount || 1}</span></p>
-                                <p className="text-xs text-gray-500">Rank: <span className="font-semibold text-gray-700">#{hoveredPixel.ownerRank || '-'}</span></p>
-                                <p className="text-xs text-gray-500">Block area: <span className="font-semibold text-gray-700">{hoveredPixel.blockArea || 1}</span></p>
-                                <p className="text-xs text-gray-500">Position: <span className="font-mono text-gray-700">{hoveredPixel.x}, {hoveredPixel.y}</span></p>
+                        ) : (
+                            <div
+                                className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_16px_48px_rgba(0,0,0,0.14)] border border-white/60 overflow-hidden"
+                                style={{ minWidth: 240, maxWidth: 300 }}
+                            >
+                                {/* Header accent bar */}
+                                <div className="h-1 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-400" />
+
+                                <div className="p-4">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        {/* Logo */}
+                                        <div
+                                            className="w-10 h-10 rounded-xl flex-shrink-0 overflow-hidden border border-black/08 shadow-sm flex items-center justify-center text-white text-xs font-bold"
+                                            style={{ backgroundColor: '#6366f1' }}
+                                        >
+                                            {hoveredPixel.logoUrl ? (
+                                                <img
+                                                    src={resolveLogoUrlUtil(hoveredPixel.logoUrl)}
+                                                    alt={hoveredPixel.ownerName}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                />
+                                            ) : (
+                                                (hoveredPixel.ownerName || '?').slice(0, 2).toUpperCase()
+                                            )}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-gray-900 text-[15px] leading-tight truncate">
+                                                {hoveredPixel.ownerName || 'Claimed Space'}
+                                            </p>
+                                            {hoveredPixel.ownerUrl && (
+                                                <p className="text-[11px] text-indigo-500 font-medium truncate mt-0.5">
+                                                    {getDomain(hoveredPixel.ownerUrl)}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                                        <div>
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Pixels</p>
+                                            <p className="text-sm font-bold text-gray-900 font-mono">{(hoveredPixel.ownerPixelCount || 1).toLocaleString()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Rank</p>
+                                            <p className="text-sm font-bold text-gray-900">#{hoveredPixel.ownerRank || '–'}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                                        <span className="text-[10px] font-mono text-gray-400">{hoveredPixel.x}, {hoveredPixel.y}</span>
+                                        <span className="text-[11px] font-semibold text-indigo-500 flex items-center gap-1">
+                                            Click to explore
+                                            <svg width="9" height="9" viewBox="0 0 9 9" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                                <path d="M1 8L8 1M8 1H3M8 1v5"/>
+                                            </svg>
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
-                                <span className="text-[11px] text-gray-400 font-medium">Click to visit ↗</span>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Selection action bar */}
             {selectedPixels.size > 0 && (
@@ -1916,14 +2078,20 @@ export default function PixelBoard() {
 
                             {/* Logo */}
                             <div
-                                className="w-12 h-12 rounded-full flex-shrink-0 border border-black/08 shadow-sm overflow-hidden"
-                                style={{
-                                    backgroundColor: '#e5e7eb',
-                                    backgroundImage: focusedBrand.logoUrl ? `url(${focusedBrand.logoUrl})` : 'none',
-                                    backgroundSize: 'cover',
-                                    backgroundPosition: 'center',
-                                }}
-                            />
+                                className="w-12 h-12 rounded-full flex-shrink-0 border border-black/08 shadow-sm overflow-hidden flex items-center justify-center text-white font-bold text-sm"
+                                style={{ backgroundColor: '#6366f1' }}
+                            >
+                                {focusedBrand.logoUrl ? (
+                                    <img
+                                        src={resolveLogoUrlUtil(focusedBrand.logoUrl)}
+                                        alt={focusedBrand.ownerName}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                    />
+                                ) : (
+                                    (focusedBrand.ownerName || '?').slice(0, 2).toUpperCase()
+                                )}
+                            </div>
 
                             {/* Info */}
                             <div className="flex-1 min-w-0">

@@ -1,21 +1,16 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
 import Navbar from './Navbar';
 import StatsPanel from './StatsPanel';
 import Leaderboard from './Leaderboard';
 import BrandSearch from './BrandSearch';
-import { useAuth } from '../hooks/useAuth';
 
-export default function HUD() {
-    const { user } = useAuth();
-    const [leaderboardOpen, setLeaderboardOpen] = useState(false);
-
+export default function HUD({ leaderboardOpen, onToggleLeaderboard }) {
     return (
         <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
             {/* Top Bar Area */}
             <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-start pointer-events-none z-50">
                 <div className="pointer-events-auto">
-                    <Navbar onToggleLeaderboard={() => setLeaderboardOpen(!leaderboardOpen)} />
+                    <Navbar onToggleLeaderboard={onToggleLeaderboard} />
                 </div>
                 <div className="pointer-events-auto origin-top-right scale-[0.85] opacity-90 hover:opacity-100 hover:scale-100 transition-all duration-300">
                     <StatsPanel isHUD={true} />

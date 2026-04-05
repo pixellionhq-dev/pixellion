@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import usePixelViewport from '../store/usePixelViewport';
+import { resolveLogoUrl } from '../utils/resolveLogoUrl';
 
 const RECENT_KEY = 'px_recent_searches';
 const MAX_RECENT = 3;
@@ -202,14 +203,20 @@ export default function CommandPalette({ onSelectBrand }) {
                                             <div className="flex items-center gap-3 min-w-0">
                                                 {/* Brand logo */}
                                                 <div
-                                                    className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden border border-black/5 shadow-sm bg-gray-100"
-                                                    style={{
-                                                        backgroundColor: brand.color || '#e5e7eb',
-                                                        backgroundImage: brand.logoUrl ? `url(${brand.logoUrl})` : 'none',
-                                                        backgroundSize: 'cover',
-                                                        backgroundPosition: 'center',
-                                                    }}
-                                                />
+                                                    className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden border border-black/5 shadow-sm flex items-center justify-center text-white text-[10px] font-bold"
+                                                    style={{ backgroundColor: brand.color || '#6366f1' }}
+                                                >
+                                                    {brand.logoUrl ? (
+                                                        <img
+                                                            src={resolveLogoUrl(brand.logoUrl)}
+                                                            alt={brand.brandName}
+                                                            className="w-full h-full object-cover"
+                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                        />
+                                                    ) : (
+                                                        (brand.brandName || '?').slice(0, 2).toUpperCase()
+                                                    )}
+                                                </div>
                                                 <span className="font-medium text-[var(--color-text-primary)] text-sm truncate">
                                                     <HighlightMatch text={brand.brandName || ''} query={query} />
                                                 </span>

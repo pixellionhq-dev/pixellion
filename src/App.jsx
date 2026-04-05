@@ -9,6 +9,7 @@ import usePixelViewport from './store/usePixelViewport';
 
 export default function App() {
   const [pulseEvents, setPulseEvents] = useState([]);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [showIntro, setShowIntro] = useState(
     () => !sessionStorage.getItem('px_intro_seen')
   );
@@ -73,12 +74,15 @@ export default function App() {
       
       {/* Universal Fullscreen Canvas */}
       <main className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing z-10">
-         <PixelBoard />
+         <PixelBoard leaderboardOpen={leaderboardOpen} />
       </main>
 
       {/* Floating HUD Layer */}
-      <HUD />
-      
+      <HUD
+        leaderboardOpen={leaderboardOpen}
+        onToggleLeaderboard={() => setLeaderboardOpen(prev => !prev)}
+      />
+
       {/* Global Command Center */}
       <CommandPalette onSelectBrand={(brand) => {
          document.dispatchEvent(new CustomEvent('map:zoomToBrand', { detail: brand.brandId }));
