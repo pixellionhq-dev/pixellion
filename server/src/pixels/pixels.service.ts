@@ -109,6 +109,7 @@ export class PixelsService {
 
     if (file && r2Client) {
       const filename = `${uuidv4()}${extname(file.originalname)}`;
+      console.log('[R2] Upload attempt:', { bucket: R2_BUCKET, key: `logos/${filename}`, size: file.size, mimetype: file.mimetype, publicUrl: R2_PUBLIC_URL });
       try {
         await r2Client.send(
           new PutObjectCommand({

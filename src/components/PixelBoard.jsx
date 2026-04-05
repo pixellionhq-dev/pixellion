@@ -135,6 +135,13 @@ export default function PixelBoard({ leaderboardOpen = false }) {
     // Purchase highlight animation
     const purchaseHighlight = useRef(null); // { bounds: {minX,minY,maxX,maxY}, startTime }
 
+    // ADD 1 — Grid pulse cells
+    const pulsingCellsRef = useRef([]); // [{x, y, startTime}]
+
+    // ADD 4 — First-time onboarding tooltip
+    const [showOnboarding, setShowOnboarding] = useState(false);
+    const onboardingDismissed = useRef(false);
+
     // Fast lookup
     const brandSummaryMap = useMemo(() => {
         return new Map((brands || []).map((brand) => [brand.brandId, brand]));
@@ -184,6 +191,10 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         }
         return map;
     }, [ownedPixels]);
+
+    // BUG 3 — always-current ref so closures never see stale ownedMap
+    const ownedMapRef = useRef(ownedMap);
+    useEffect(() => { ownedMapRef.current = ownedMap; }, [ownedMap]);
 
     const getPixelState = useCallback((x, y) => {
         const key = `${x},${y}`;
@@ -599,7 +610,23 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                 };
             });
 
-            // 2. Draw block backgrounds (batched by color to minimize fillStyle changes)
+            // ADD 3 — Ambient brand glow (breathing shadow behind large blocks)
+            const glowNow   = performance.now();
+            const glowAlpha = 0.28 + Math.sin(glowNow / 2000) * 0.10; // 0.18 → 0.38
+            if (c.zoom > 1.2) {
+                // Only at close zoom — shadows are expensive; skip at wide view
+                visibleDrawBlocks.forEach(({ tl, br, drawW, drawH }) => {
+                    if (drawW < 20 || drawH < 20) return;
+                    ctx.save();
+                    ctx.shadowBlur  = 14;
+                    ctx.shadowColor = `rgba(0,0,0,${glowAlpha * 0.35})`;
+                    ctx.fillStyle   = 'transparent';
+                    ctx.fillRect(tl.x + 1, tl.y + 1, drawW - 2, drawH - 2);
+                    ctx.restore();
+                });
+            }
+
+            // 2. Draw block backgrounds (batched by color to minimise fillStyle changes)
             const colorGroups = new Map();
             visibleDrawBlocks.forEach((vdb) => {
                 const c = vdb.block.color || '#000000';
@@ -920,8 +947,24 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                 }
             }
 
-            // Keep animating for marching ants
-            if (selectedPixels.size > 0 || isDragging || hoveredPixel || purchaseHighlight.current) {
+            // ADD 1 — Animated grid pulse (subtle blue cells)
+            const nowPulse = performance.now();
+            const PULSE_DUR = 650;
+            pulsingCellsRef.current = pulsingCellsRef.current.filter(cell => {
+                const elapsed = nowPulse - cell.startTime;
+                if (elapsed >= PULSE_DUR) return false;
+                const t = elapsed / PULSE_DUR;
+                const alpha = Math.sin(t * Math.PI) * 0.12; // 0 → 0.12 → 0
+                const tl = boardToScreen(cell.x,     cell.y);
+                const br = boardToScreen(cell.x + 1, cell.y + 1);
+                ctx.fillStyle = `rgba(0,102,204,${alpha})`;
+                ctx.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+                return true;
+            });
+
+            // Keep animating for marching ants, pulses, and purchase highlight
+            const hasPulses = pulsingCellsRef.current.length > 0;
+            if (selectedPixels.size > 0 || isDragging || hoveredPixel || purchaseHighlight.current || hasPulses) {
                 requestRedrawRef.current();
             }
     }, [selectedPixels, hoveredPixel, isDragging, boardToScreen, ownedMap]);
@@ -992,6 +1035,31 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         }, 50);
         return () => clearTimeout(timer);
     }, [leaderboardOpen, scheduleRedraw]);
+
+    // ADD 1 — Animated grid pulse: add a random free cell to pulse every 3 seconds
+    useEffect(() => {
+        const id = setInterval(() => {
+            if (pulsingCellsRef.current.length >= 5) return;
+            const c  = camera.current;
+            const { w, h } = canvasSizeRef.current;
+            if (!w || !h) return;
+            // Pick a random visible board cell
+            const bx = Math.floor(c.x + Math.random() * (w / c.zoom));
+            const by = Math.floor(c.y + Math.random() * (h / c.zoom));
+            if (bx < 0 || bx >= BOARD_WIDTH || by < 0 || by >= BOARD_HEIGHT) return;
+            if (ownedMapRef.current.has(`${bx},${by}`)) return;
+            pulsingCellsRef.current.push({ x: bx, y: by, startTime: performance.now() });
+            scheduleRedraw();
+        }, 3000);
+        return () => clearInterval(id);
+    }, [scheduleRedraw]);
+
+    // ADD 4 — First-time onboarding tooltip
+    useEffect(() => {
+        if (localStorage.getItem('px_onboarded')) return;
+        const t = setTimeout(() => setShowOnboarding(true), 2200);
+        return () => clearTimeout(t);
+    }, []);
 
     // Preload visible logos whenever pixel data or camera changes
     useEffect(() => {
@@ -1523,16 +1591,19 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         }
     }, []);
 
-    // Double-click on owned pixel → open brand URL in new tab
+    // Double-click on owned pixel → open brand URL in new tab (BUG 1 fix)
     const handleDoubleClick = useCallback((e) => {
         const pixel = getPixelFromEvent(e);
         if (!pixel) return;
         const key = `${pixel.x},${pixel.y}`;
         const owner = ownedMap.get(key);
-        if (owner?.ownerUrl) {
-            const url = owner.ownerUrl.startsWith('http') ? owner.ownerUrl : `https://${owner.ownerUrl}`;
-            window.open(url, '_blank', 'noopener,noreferrer');
-        }
+        // Check ownerUrl (mapped from summary.url) AND fallback to owner.url
+        const raw = owner?.ownerUrl || owner?.url || '';
+        console.log('[dblclick] pixel:', key, 'ownerName:', owner?.ownerName,
+            'ownerUrl:', owner?.ownerUrl, 'url:', owner?.url);
+        if (!raw) return;
+        const fullUrl = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+        window.open(fullUrl, '_blank', 'noopener,noreferrer');
     }, [getPixelFromEvent, ownedMap]);
 
     // ── Mobile gesture helpers ────────────────────────────────────────────
@@ -2183,6 +2254,55 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                     </button>
                 </div>
             </div>
+
+            {/* ADD 2 — Available territory indicator */}
+            <div className="absolute left-6 bottom-6 pointer-events-none z-40">
+                <div className="glass-card flex items-center gap-2 px-3 py-2 rounded-[12px] bg-white/70 border border-[var(--color-border-subtle)]">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse flex-shrink-0" />
+                    <span className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
+                        {(1000000 - (blocks?.reduce((sum, b) => sum + b.width * b.height, 0) ?? 0)).toLocaleString()}
+                        <span className="font-normal text-[var(--color-text-tertiary)]"> px available</span>
+                    </span>
+                </div>
+            </div>
+
+            {/* ADD 6 — Zoom-out guide overlay */}
+            {zoomDisplay < 0.3 && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none">
+                    <div className="glass-card px-4 py-2.5 rounded-2xl flex items-center gap-2.5 bg-white/80 border border-[var(--color-border-subtle)] shadow-lg">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-text-tertiary)]">
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>
+                        </svg>
+                        <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">Scroll or pinch to zoom in and explore</span>
+                    </div>
+                </div>
+            )}
+
+            {/* ADD 4 — Onboarding tooltip */}
+            {showOnboarding && (
+                <div className="absolute top-1/2 left-1/2 z-[70] pointer-events-auto"
+                    style={{ transform: 'translate(-50%, calc(-50% + 80px))' }}
+                >
+                    <div className="glass-card px-4 py-3 rounded-2xl flex items-center gap-3 bg-white/90 border border-[var(--color-border-subtle)] shadow-xl animate-slide-in">
+                        <span className="text-base">👆</span>
+                        <div>
+                            <p className="text-[12px] font-semibold text-[var(--color-text-primary)]">Click any empty area to select pixels</p>
+                            <p className="text-[10px] text-[var(--color-text-tertiary)] mt-0.5">Drag to select a rectangle · Double-click a brand to visit its site</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setShowOnboarding(false);
+                                localStorage.setItem('px_onboarded', '1');
+                            }}
+                            className="ml-1 w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors flex-shrink-0"
+                        >
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M1 1l10 10M11 1L1 11"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
             <PurchaseModal

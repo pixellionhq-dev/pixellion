@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import AuthModal from './AuthModal';
 import { useAuth } from '../hooks/useAuth';
 
-export default function Navbar({ onToggleLeaderboard }) {
+export default function Navbar({ onToggleLeaderboard, onShowShortcuts }) {
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const { user, logout } = useAuth();
 
@@ -35,14 +35,25 @@ export default function Navbar({ onToggleLeaderboard }) {
                     >
                         Leaderboard
                     </motion.button>
-                    <motion.button 
-                        whileHover={{ scale: 1.05 }} 
-                        whileTap={{ scale: 0.95 }} 
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
                         className="group relative text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"
                     >
                         Directory
                     </motion.button>
+                    {onShowShortcuts && (
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={onShowShortcuts}
+                            className="group relative text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition flex items-center gap-1"
+                            title="Keyboard shortcuts (?)"
+                        >
+                            <kbd className="text-[10px] px-1 py-0.5 bg-gray-100 rounded font-mono">?</kbd>
+                        </motion.button>
+                    )}
                 </div>
 
                 <div className="w-px h-6 bg-[var(--color-border-subtle)] hidden md:block" />
