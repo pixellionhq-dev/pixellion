@@ -57,6 +57,12 @@ async function fetchViewport(vp) {
         loading = false;
         error = null;
         lastKey = nextKey;
+        // FIX 4 — Audit: log first 3 brands to verify logoUrl is in API response
+        if (payloadBrands.length > 0) {
+            console.log('BRANDS FROM API (sample):', payloadBrands.slice(0, 3).map(b => ({
+                brandId: b.brandId, brandName: b.brandName, logoUrl: b.logoUrl, url: b.url,
+            })));
+        }
         emit();
     } catch (err) {
         if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') {

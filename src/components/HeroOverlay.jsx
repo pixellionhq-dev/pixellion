@@ -18,7 +18,7 @@ const FEATURES = [
     {
         symbol: '⊞',
         title:  'Buy Pixels',
-        desc:   'Select any area on our 1,000 × 1,000 grid and claim it forever.',
+        desc:   'Select any area on our 1,000 × 1,000 grid. Choose your size, upload your logo.',
     },
     {
         symbol: '◎',
@@ -32,28 +32,30 @@ const FEATURES = [
     },
 ];
 
-// ── Particle factory ────────────────────────────────────────────────────────
+// ── Particle factory — floating pixel squares ───────────────────────────────
 function makeParticles(W, H) {
     return Array.from({ length: NUM_PARTICLES }, () => {
-        const r   = Math.random();
-        const type = r < 0.58 ? 'dot' : r < 0.79 ? 'rect' : 'square';
-        const speed = 0.06 + Math.random() * 0.22;
+        // 2x faster than before
+        const speed = (0.06 + Math.random() * 0.22) * 2;
         const angle = Math.random() * Math.PI * 2;
-        const alpha = 0.07 + Math.random() * 0.20;
         const baseVx = Math.cos(angle) * speed;
         const baseVy = Math.sin(angle) * speed;
+        // Varied pixel sizes: 2x2, 4x4, or 6x6
+        const sizeRoll = Math.random();
+        const size = sizeRoll < 0.4 ? 2 : sizeRoll < 0.8 ? 4 : 6;
+        // ~20% blue accent pixels, rest monochrome
+        const isBlue = Math.random() < 0.20;
+        const alpha = isBlue
+            ? 0.30
+            : 0.20 + Math.random() * 0.20; // 0.20–0.40
         return {
             x: Math.random() * W,
             y: Math.random() * H,
             vx: baseVx, vy: baseVy, baseVx, baseVy,
-            type,
-            r:   type === 'dot'    ? 1.2 + Math.random() * 2.0 : 0,
-            w:   type === 'rect'   ? 4.5 + Math.random() * 2.5 :
-                 type === 'square' ? 2.5 : 0,
-            h:   type === 'rect'   ? 2.0 :
-                 type === 'square' ? 2.5 : 0,
+            size,
+            isBlue,
             rotation: Math.random() * Math.PI * 2,
-            rotSpeed: (Math.random() - 0.5) * 0.009,
+            rotSpeed: (Math.random() - 0.5) * 0.018,
             alpha,
         };
     });
@@ -178,16 +180,10 @@ export default function HeroOverlay({ onDismiss }) {
 
                 ctx.save();
                 ctx.globalAlpha = p.alpha;
-                ctx.fillStyle   = '#000';
+                ctx.fillStyle   = p.isBlue ? 'rgba(0,102,204,1)' : '#000';
                 ctx.translate(p.x, p.y);
                 ctx.rotate(p.rotation);
-                if (p.type === 'dot') {
-                    ctx.beginPath();
-                    ctx.arc(0, 0, p.r, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-                }
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
                 ctx.restore();
             }
             animRafRef.current = requestAnimationFrame(loop);
@@ -222,8 +218,6 @@ export default function HeroOverlay({ onDismiss }) {
 
     const dismiss = useCallback(() => {
         setExiting(true);
-        sessionStorage.setItem('px_hero_seen', '1');
-        window.location.hash = 'board';
         setTimeout(() => onDismiss?.(), 530);
     }, [onDismiss]);
 

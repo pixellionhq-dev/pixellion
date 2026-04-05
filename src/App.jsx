@@ -14,25 +14,14 @@ export default function App() {
   const [pulseEvents, setPulseEvents] = useState([]);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
-  // ── Intro: gated by sessionStorage ───────────────────────────────────────
+  // ── Intro: gated by sessionStorage (loading animation, shows once) ───────
   const [showIntro, setShowIntro] = useState(
     () => !sessionStorage.getItem('px_intro_seen')
   );
 
-  // ── Hero: hash-based routing so browser Back button works ────────────────
-  // #board  → show canvas
-  // '' / #home → show hero (if intro is done)
-  const [hashLoc, setHashLoc] = useState(() => window.location.hash);
-
-  useEffect(() => {
-    const onHash = () => setHashLoc(window.location.hash);
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
-  }, []);
-
-  // Show hero whenever: intro is done AND hash isn't '#board'
-  const showHero = !showIntro && hashLoc !== '#board';
+  // Board is always the default page. Hero/About is a modal opened by navbar.
 
   const knownPurchaseIds   = useRef(new Set());
   const hasPrimedPurchases = useRef(false);
@@ -102,13 +91,8 @@ export default function App() {
   return (
     <div className="w-screen h-screen overflow-hidden fixed top-0 left-0 bg-transparent z-0">
       {showIntro && <ShaderIntro onDone={() => setShowIntro(false)} />}
-      {showHero  && (
-        <HeroOverlay
-          onDismiss={() => {
-            // hash is already set to '#board' inside HeroOverlay.dismiss()
-            setHashLoc('#board');
-          }}
-        />
+      {showAbout && (
+        <HeroOverlay onDismiss={() => setShowAbout(false)} />
       )}
 
       <ShaderBackground />
@@ -123,6 +107,7 @@ export default function App() {
         leaderboardOpen={leaderboardOpen}
         onToggleLeaderboard={() => setLeaderboardOpen(p => !p)}
         onShowShortcuts={() => setShowShortcuts(true)}
+        onShowAbout={() => setShowAbout(true)}
       />
 
       {/* Global Command Centre */}

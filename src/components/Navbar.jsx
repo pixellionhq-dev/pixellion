@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import AuthModal from './AuthModal';
 import { useAuth } from '../hooks/useAuth';
 
-export default function Navbar({ onToggleLeaderboard, onShowShortcuts }) {
+export default function Navbar({ onToggleLeaderboard, onShowShortcuts, onShowAbout }) {
     const [authModalOpen, setAuthModalOpen] = useState(false);
     const { user, logout } = useAuth();
 
@@ -43,6 +43,17 @@ export default function Navbar({ onToggleLeaderboard, onShowShortcuts }) {
                     >
                         Directory
                     </motion.button>
+                    {onShowAbout && (
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={onShowAbout}
+                            className="group relative text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition"
+                            title="About Pixellion"
+                        >
+                            About
+                        </motion.button>
+                    )}
                     {onShowShortcuts && (
                         <motion.button
                             whileHover={{ scale: 1.05 }}

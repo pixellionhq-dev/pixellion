@@ -142,6 +142,9 @@ export default function PixelBoard({ leaderboardOpen = false }) {
     const [showOnboarding, setShowOnboarding] = useState(false);
     const onboardingDismissed = useRef(false);
 
+    // FIX 5 — Ambient pulse circles (5 persistent positions cycling every 4s)
+    const ambientPulsesRef = useRef([]);
+
     // Fast lookup
     const brandSummaryMap = useMemo(() => {
         return new Map((brands || []).map((brand) => [brand.brandId, brand]));
@@ -188,6 +191,12 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         const map = new Map();
         if (ownedPixels) {
             ownedPixels.forEach(p => map.set(`${p.x},${p.y}`, p));
+        }
+        // FIX 4 — Audit logging
+        if (map.size > 0) {
+            console.log('OWNED PIXEL SAMPLE:', [...map.entries()].slice(0, 3).map(([k, v]) => ({
+                key: k, logoUrl: v.logoUrl, ownerUrl: v.ownerUrl, ownerName: v.ownerName,
+            })));
         }
         return map;
     }, [ownedPixels]);
@@ -760,6 +769,23 @@ export default function PixelBoard({ leaderboardOpen = false }) {
                 ctx.stroke();
             }
 
+            // FIX 5 — Ambient pulse circles on empty cells
+            const pulseNow = performance.now();
+            const PULSE_CYCLE = 2000;
+            for (const pulse of ambientPulsesRef.current) {
+                if (ownedMapRef.current.has(`${pulse.x},${pulse.y}`)) continue;
+                const elapsed = (pulseNow - pulse.startTime) % PULSE_CYCLE;
+                const t = elapsed / PULSE_CYCLE;
+                const alpha = Math.sin(t * Math.PI) * 0.15;
+                if (alpha < 0.005) continue;
+                const sc = boardToScreen(pulse.x + 0.5, pulse.y + 0.5);
+                const radius = c.zoom * 0.5;
+                ctx.beginPath();
+                ctx.arc(sc.x, sc.y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0,102,204,${alpha})`;
+                ctx.fill();
+            }
+
             // 6. Draw board border
             ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 1;
@@ -1059,6 +1085,24 @@ export default function PixelBoard({ leaderboardOpen = false }) {
         if (localStorage.getItem('px_onboarded')) return;
         const t = setTimeout(() => setShowOnboarding(true), 2200);
         return () => clearTimeout(t);
+    }, []);
+
+    // FIX 5 — Initialise and cycle ambient pulse positions
+    useEffect(() => {
+        ambientPulsesRef.current = Array.from({ length: 5 }, () => ({
+            x: Math.floor(Math.random() * BOARD_WIDTH),
+            y: Math.floor(Math.random() * BOARD_HEIGHT),
+            startTime: performance.now() - Math.random() * 2000,
+        }));
+        const id = setInterval(() => {
+            const idx = Math.floor(Math.random() * 5);
+            ambientPulsesRef.current[idx] = {
+                x: Math.floor(Math.random() * BOARD_WIDTH),
+                y: Math.floor(Math.random() * BOARD_HEIGHT),
+                startTime: performance.now(),
+            };
+        }, 4000);
+        return () => clearInterval(id);
     }, []);
 
     // Preload visible logos whenever pixel data or camera changes
