@@ -88,6 +88,8 @@ export default function PixelBoard() {
     const [toastMessage, setToastMessage] = useState(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [canvasSize, setCanvasSize] = useState({ w: 800, h: 600 });
+    const canvasSizeRef = useRef(canvasSize);
+    canvasSizeRef.current = canvasSize;
 
     // Heatmap toggle
     const [heatmapVisible, setHeatmapVisible] = useState(false);
@@ -302,7 +304,7 @@ export default function PixelBoard() {
 
     const getViewportBounds = useCallback(() => {
         const c = camera.current;
-        const { w, h } = canvasSize;
+        const { w, h } = canvasSizeRef.current;
         if (!w || !h || !c.zoom) return null;
 
         const minX = Math.max(0, Math.floor(c.x));
@@ -312,7 +314,7 @@ export default function PixelBoard() {
 
         if (maxX < minX || maxY < minY) return null;
         return { minX, minY, maxX, maxY };
-    }, [canvasSize]);
+    }, []);
 
     const queueViewportFetch = useCallback((immediate = false) => {
         const bounds = getViewportBounds();
@@ -373,7 +375,7 @@ export default function PixelBoard() {
     const MINIMAP_SAFE_PX = 180; // slightly larger than mini-map (160 + spacing)
     const clampCamera = useCallback(() => {
         const c = camera.current;
-        const { w, h } = canvasSize;
+        const { w, h } = canvasSizeRef.current;
         const viewW = w / c.zoom;
         const viewH = h / c.zoom;
 
@@ -388,11 +390,11 @@ export default function PixelBoard() {
 
         c.x = Math.max(minX, Math.min(maxX, c.x));
         c.y = Math.max(minY, Math.min(maxY, c.y));
-    }, [canvasSize]);
+    }, []);
 
     // --- Fit entire board in view ---
     const fitToViewport = useCallback(() => {
-        const { w, h } = canvasSize;
+        const { w, h } = canvasSizeRef.current;
         if (w === 0 || h === 0) return;
 
         // Add 5% padding so the board doesn't touch the container edges
@@ -400,14 +402,12 @@ export default function PixelBoard() {
         const fitZoom = Math.min(w / BOARD_WIDTH, h / BOARD_HEIGHT) * padding;
 
         // Center: set camera.x/y so the board is in the middle of the viewport
-        // The viewport shows [camera.x .. camera.x + w/zoom] in board coords
-        // To center: camera.x + (w/zoom)/2 = BOARD_WIDTH/2
         camera.current.zoom = fitZoom;
         camera.current.x = BOARD_WIDTH / 2 - (w / fitZoom) / 2;
         camera.current.y = BOARD_HEIGHT / 2 - (h / fitZoom) / 2;
         targetZoom.current = fitZoom;
         setZoomDisplay(fitZoom);
-    }, [canvasSize]);
+    }, []);
 
     // --- Resize observer ---
     useEffect(() => {
@@ -416,7 +416,37 @@ export default function PixelBoard() {
         const ro = new ResizeObserver(entries => {
             for (const entry of entries) {
                 const { width, height } = entry.contentRect;
-                setCanvasSize({ w: Math.floor(width), h: Math.floor(height) });
+                const w = Math.floor(width);
+                const h = Math.floor(height);
+                
+                // Sync both state AND ref immediately
+                setCanvasSize({ w, h });
+                canvasSizeRef.current = { w, h };
+
+                // Directly resize the canvas internal buffers so they don't stay at 300x150
+                const dpr = window.devicePixelRatio || 1;
+                const baseCanvas = canvasRef.current;
+                const overlayCanvas = overlayCanvasRef.current;
+                if (baseCanvas && (baseCanvas.width !== w * dpr || baseCanvas.height !== h * dpr)) {
+                    baseCanvas.width = w * dpr;
+                    baseCanvas.height = h * dpr;
+                    baseCanvas.style.width = `${w}px`;
+                    baseCanvas.style.height = `${h}px`;
+                    const ctx = baseCanvas.getContext('2d');
+                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                }
+                if (overlayCanvas && (overlayCanvas.width !== w * dpr || overlayCanvas.height !== h * dpr)) {
+                    overlayCanvas.width = w * dpr;
+                    overlayCanvas.height = h * dpr;
+                    overlayCanvas.style.width = `${w}px`;
+                    overlayCanvas.style.height = `${h}px`;
+                    const ctx = overlayCanvas.getContext('2d');
+                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                }
+                
+                // Trigger a redraw with the fresh dimensions
+                // Use queueMicrotask to run after this callback but before next paint
+                queueMicrotask(() => requestRedrawRef.current());
             }
         });
         ro.observe(container);
@@ -429,6 +459,10 @@ export default function PixelBoard() {
         if (canvasSize.w > 100 && canvasSize.h > 100 && !hasInitialized.current) {
             hasInitialized.current = true;
             fitToViewport();
+            // Kick off the first pixel data fetch immediately
+            queueViewportFetch(true);
+            // Use setTimeout to ensure requestRedrawRef has been synced by other effects
+            setTimeout(() => requestRedrawRef.current(), 0);
         }
     }, [canvasSize, fitToViewport, queueViewportFetch]);
 
@@ -439,15 +473,16 @@ export default function PixelBoard() {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
-        const { w, h } = canvasSize;
-
+        const { w, h } = canvasSizeRef.current;
+        if (!w || !h) return;
         if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
             canvas.width = w * dpr;
             canvas.height = h * dpr;
             canvas.style.width = `${w}px`;
             canvas.style.height = `${h}px`;
-            ctx.scale(dpr, dpr);
         }
+        // Always set transform unconditionally — critical for DPR scaling
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
             const c = camera.current;
             const cellScreen = c.zoom; // pixels per cell on screen
@@ -625,7 +660,7 @@ export default function PixelBoard() {
             ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 1;
             ctx.strokeRect(boardTopLeft.x, boardTopLeft.y, boardBottomRight.x - boardTopLeft.x, boardBottomRight.y - boardTopLeft.y);
-    }, [precomputedBlocks, canvasSize, boardToScreen, drawLogoWithFit, resolveLogoUrl]);
+    }, [precomputedBlocks, boardToScreen, drawLogoWithFit, resolveLogoUrl]);
 
     // --- Draw overlay (hover, selection, drag preview) ---
     const drawOverlayBoard = useCallback(() => {
@@ -633,15 +668,16 @@ export default function PixelBoard() {
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
-        const { w, h } = canvasSize;
-
+        const { w, h } = canvasSizeRef.current;
+        if (!w || !h) return;
         if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
             canvas.width = w * dpr;
             canvas.height = h * dpr;
             canvas.style.width = `${w}px`;
             canvas.style.height = `${h}px`;
-            ctx.scale(dpr, dpr);
         }
+        // Always set transform unconditionally — critical for DPR scaling
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
             ctx.clearRect(0, 0, w, h);
             const c = camera.current;
@@ -755,7 +791,7 @@ export default function PixelBoard() {
             if (selectedPixels.size > 0 || isDragging || hoveredPixel || purchaseHighlight.current) {
                 requestRedrawRef.current();
             }
-    }, [selectedPixels, hoveredPixel, isDragging, canvasSize, boardToScreen, ownedMap]);
+    }, [selectedPixels, hoveredPixel, isDragging, boardToScreen, ownedMap]);
 
     // --- Single frame scheduler for all board redraw requests ---
     const scheduleRedraw = useCallback(() => {
@@ -1645,8 +1681,7 @@ export default function PixelBoard() {
     const zoomPercent = Math.round(zoomDisplay * 100);
 
     return (
-        <>
-            <div id="board" className="absolute inset-0 w-full h-full overflow-hidden bg-[var(--color-surface)]">
+        <div id="board" className="absolute inset-0 w-full h-full overflow-hidden" style={{ background: 'transparent' }}>
             <AnimatePresence>
                 {toastMessage && (
                     <motion.div
@@ -1662,155 +1697,145 @@ export default function PixelBoard() {
             <div
                 ref={containerRef}
                 className="absolute inset-0 w-full h-full"
+                style={{ background: 'transparent' }}
             >
-                    <canvas
-                        ref={canvasRef}
-                        style={{
-                            position: 'absolute',
-                            left: 0,
-                            top: 0,
-                            width: '100%',
-                            height: '100%',
-                            imageRendering: 'pixelated',
-                            touchAction: 'none',
-                            WebkitUserSelect: 'none',
-                            userSelect: 'none',
-                        }}
-                    />
-                    <canvas
-                        ref={overlayCanvasRef}
-                        style={{
-                            position: 'absolute',
-                            left: 0,
-                            top: 0,
-                            width: '100%',
-                            height: '100%',
-                            cursor: 'crosshair',
-                            touchAction: 'none',
-                            WebkitUserSelect: 'none',
-                            userSelect: 'none',
-                        }}
-                        onDragStart={(e) => e.preventDefault()}
-                    />
-                    {isLoading && (
-                        <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
-                            <div className="flex flex-col items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
-                                <span className="text-xs font-medium text-gray-500 tracking-wide">Loading canvas…</span>
+                <canvas
+                    ref={canvasRef}
+                    style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: '100%',
+                        height: '100%',
+                        imageRendering: 'pixelated',
+                        touchAction: 'none',
+                        WebkitUserSelect: 'none',
+                        userSelect: 'none',
+                    }}
+                />
+                <canvas
+                    ref={overlayCanvasRef}
+                    style={{
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        width: '100%',
+                        height: '100%',
+                        cursor: 'crosshair',
+                        touchAction: 'none',
+                        WebkitUserSelect: 'none',
+                        userSelect: 'none',
+                    }}
+                    onDragStart={(e) => e.preventDefault()}
+                />
+                {isLoading && (
+                    <div className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center bg-white/50 backdrop-blur-[1px]">
+                        <div className="flex flex-col items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
+                            <span className="text-xs font-medium text-gray-500 tracking-wide">Loading canvas…</span>
+                        </div>
+                    </div>
+                )}
+                <HeatmapOverlay
+                    camera={camera}
+                    canvasSize={canvasSize}
+                    ownedPixels={ownedPixels}
+                    visible={heatmapVisible}
+                />
+                <MiniMapCanvas
+                    camera={camera}
+                    canvasSize={canvasSize}
+                    ownedPixels={ownedPixels}
+                    onNavigate={onMiniMapNavigate}
+                    zoomDisplay={zoomDisplay}
+                    cursorNear={cursorNearMinimap}
+                />
+            </div>
+
+            {/* Drag pixel count indicator */}
+            {isDragging && dragPixelCount > 0 && (
+                <div
+                    className="fixed -translate-x-1/2 z-[100] bg-black text-white text-sm font-bold px-4 py-2 rounded-full shadow pointer-events-none transition-colors"
+                    style={{
+                        left: cursorPos.x,
+                        top: cursorPos.y - 50
+                    }}
+                >
+                    {dragPixelCount} px
+                </div>
+            )}
+
+            {/* Hover tooltip */}
+            {hoveredPixel && (
+                <div className="fixed z-[100] pointer-events-none" style={{ left: tooltippos.x + 12, top: tooltippos.y + 12 }}>
+                    {!hoveredPixel.isOwned ? (
+                        <div className="bg-white/90 backdrop-blur-md rounded-xl px-4 py-2.5 shadow-lg border border-white/40">
+                            <div className="flex items-center gap-3">
+                                <span className="font-mono text-[11px] text-gray-400 tracking-tight">{hoveredPixel.x}, {hoveredPixel.y}</span>
+                                <span className="w-px h-3 bg-gray-200"></span>
+                                <span className="text-xs font-semibold text-emerald-600">Available</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-white/95 backdrop-blur-md border border-gray-200 shadow-xl rounded-xl p-3.5 text-sm text-gray-800 min-w-[220px]">
+                            <p className="font-bold text-gray-900 mb-1.5 leading-tight text-[15px]">{hoveredPixel.ownerName || 'Claimed Space'}</p>
+                            {hoveredPixel.ownerUrl && (
+                                <p className="text-[11px] text-blue-500 font-medium mb-2 truncate">
+                                    {(() => { try { return new URL(hoveredPixel.ownerUrl.startsWith('http') ? hoveredPixel.ownerUrl : 'https://' + hoveredPixel.ownerUrl).hostname; } catch { return hoveredPixel.ownerUrl; } })()}
+                                </p>
+                            )}
+                            <div className="space-y-0.5 mb-2">
+                                <p className="text-xs text-gray-500">Pixels owned: <span className="font-semibold text-gray-700">{hoveredPixel.ownerPixelCount || 1}</span></p>
+                                <p className="text-xs text-gray-500">Rank: <span className="font-semibold text-gray-700">#{hoveredPixel.ownerRank || '-'}</span></p>
+                                <p className="text-xs text-gray-500">Block area: <span className="font-semibold text-gray-700">{hoveredPixel.blockArea || 1}</span></p>
+                                <p className="text-xs text-gray-500">Position: <span className="font-mono text-gray-700">{hoveredPixel.x}, {hoveredPixel.y}</span></p>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
+                                <span className="text-[11px] text-gray-400 font-medium">Click to visit ↗</span>
                             </div>
                         </div>
                     )}
-                    <HeatmapOverlay
-                        camera={camera}
-                        canvasSize={canvasSize}
-                        ownedPixels={ownedPixels}
-                        visible={heatmapVisible}
-                    />
-                    <MiniMapCanvas
-                        camera={camera}
-                        canvasSize={canvasSize}
-                        ownedPixels={ownedPixels}
-                        onNavigate={onMiniMapNavigate}
-                        zoomDisplay={zoomDisplay}
-                        cursorNear={cursorNearMinimap}
-                    />
                 </div>
+            )}
 
-                {isDragging && dragPixelCount > 0 && (
-                    <div
-                        className="fixed -translate-x-1/2 z-[100] bg-black text-white text-sm font-bold px-4 py-2 rounded-full shadow pointer-events-none transition-colors"
-                        style={{
-                            left: cursorPos.x,
-                            top: cursorPos.y - 50
-                        }}
+            {/* Selection action bar */}
+            {selectedPixels.size > 0 && (
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[90] animate-slide-in">
+                    <div className="glass-card shadow-2xl px-6 py-4 rounded-2xl flex items-center gap-6 border border-[var(--color-border-subtle)] bg-white/80">
+                        <div className="flex flex-col gap-0.5">
+                            <p className="text-xs font-medium text-gray-500">
+                                <span className="font-bold text-[var(--color-text-primary)]">{selectedPixels.size}</span> pixels selected
+                            </p>
+                        </div>
+                        <div className="w-px h-10 bg-[var(--color-border-subtle)]"></div>
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => setSelectedPixels(new Set())} className="text-xs font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">Cancel</button>
+                            <Button onClick={handleCheckoutClick} className="bg-[var(--color-accent)] text-white px-6 py-2.5 rounded-xl text-sm transition shadow-none hover:bg-blue-700">
+                                Secure Pixels
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Floating Map Controls HUD */}
+            <div className="absolute right-6 bottom-6 flex flex-col items-end gap-3 pointer-events-none z-40">
+                <div className="flex items-center gap-2 pointer-events-auto">
+                    <div className="glass-card flex items-center gap-1 p-1 rounded-[12px] bg-white/70 border border-[var(--color-border-subtle)]">
+                        <button onClick={() => updateTargetZoom(camera.current.zoom * 0.7)} className="w-8 h-8 flex items-center justify-center rounded-[8px] text-sm hover:bg-white/80 transition-colors">−</button>
+                        <button onClick={() => fitToViewport()} className="px-2 h-8 flex items-center justify-center rounded-[8px] text-[11px] font-semibold hover:bg-white/80 transition-colors w-12">{zoomPercent}%</button>
+                        <button onClick={() => updateTargetZoom(camera.current.zoom * 1.4)} className="w-8 h-8 flex items-center justify-center rounded-[8px] text-sm hover:bg-white/80 transition-colors">+</button>
+                    </div>
+                    <button
+                        onClick={() => setHeatmapVisible(v => !v)}
+                        className={`glass-card p-2 rounded-[12px] transition border border-[var(--color-border-subtle)] bg-white/70 ${heatmapVisible ? 'text-green-600 border-green-500/30' : 'text-[var(--color-text-secondary)] hover:text-black'}`}
+                        title="Toggle heatmap overlay"
                     >
-                        {dragPixelCount} px
-                    </div>
-                )}
-
-                {hoveredPixel && (
-                    <div className="fixed z-[100] pointer-events-none" style={{ left: tooltippos.x + 12, top: tooltippos.y + 12 }}>
-                        {!hoveredPixel.isOwned ? (
-                            <div className="bg-white/90 backdrop-blur-md rounded-xl px-4 py-2.5 shadow-lg border border-white/40">
-                                <div className="flex items-center gap-3">
-                                    <span className="font-mono text-[11px] text-gray-400 tracking-tight">{hoveredPixel.x}, {hoveredPixel.y}</span>
-                                    <span className="w-px h-3 bg-gray-200"></span>
-                                    <span className="text-xs font-semibold text-emerald-600">Available</span>
-                                    <span className="w-px h-3 bg-gray-200"></span>
-                                    <span className="text-xs font-medium text-gray-500">₹100/px</span>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="bg-white/95 backdrop-blur-md border border-gray-200 shadow-xl rounded-xl p-3.5 text-sm text-gray-800 min-w-[220px]">
-                                <p className="font-bold text-gray-900 mb-1.5 leading-tight text-[15px]">{hoveredPixel.ownerName || 'Claimed Space'}</p>
-                                {hoveredPixel.ownerUrl && (
-                                    <p className="text-[11px] text-blue-500 font-medium mb-2 truncate">
-                                        {(() => { try { return new URL(hoveredPixel.ownerUrl.startsWith('http') ? hoveredPixel.ownerUrl : 'https://' + hoveredPixel.ownerUrl).hostname; } catch { return hoveredPixel.ownerUrl; } })()}
-                                    </p>
-                                )}
-                                <div className="space-y-0.5 mb-2">
-                                    <p className="text-xs text-gray-500">Pixels owned: <span className="font-semibold text-gray-700">{hoveredPixel.ownerPixelCount || 1}</span></p>
-                                    <p className="text-xs text-gray-500">Rank: <span className="font-semibold text-gray-700">#{hoveredPixel.ownerRank || '-'}</span></p>
-                                    <p className="text-xs text-gray-500">Block area: <span className="font-semibold text-gray-700">{hoveredPixel.blockArea || 1}</span></p>
-                                    <p className="text-xs text-gray-500">Position: <span className="font-mono text-gray-700">{hoveredPixel.x}, {hoveredPixel.y}</span></p>
-                                </div>
-                                <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100">
-                                    <span className="text-[11px] text-gray-400 font-medium">Click to visit ↗</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {selectedPixels.size > 0 && (
-                    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[90] animate-slide-in">
-                        <div className="glass-card shadow-2xl px-6 py-4 rounded-2xl flex items-center gap-6 border border-[var(--color-border-subtle)] bg-white/80">
-                            <div className="flex flex-col gap-0.5">
-                                <p className="text-xs font-medium text-gray-500">
-                                    <span className="font-bold text-[var(--color-text-primary)]">{selectedPixels.size}</span> pixels selected
-                                </p>
-                                <p className="text-xs font-medium text-gray-500">Price: <span className="text-[var(--color-text-primary)]">₹100</span> / px</p>
-                                <p className="text-sm font-bold text-[var(--color-text-primary)] mt-1">Total: ₹{(selectedPixels.size * 100).toLocaleString('en-IN')}</p>
-                            </div>
-                            <div className="w-px h-10 bg-[var(--color-border-subtle)]"></div>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => setSelectedPixels(new Set())} className="text-xs font-medium text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">Cancel</button>
-                                <Button onClick={handleCheckoutClick} className="bg-[var(--color-accent)] text-white px-6 py-2.5 rounded-xl text-sm transition shadow-none hover:bg-blue-700">
-                                    Secure Pixels
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-                
-                {/* Floating Map Controls HUD */}
-                <div className="absolute right-6 bottom-6 flex flex-col items-end gap-3 pointer-events-none z-40">
-                    <MiniMapCanvas
-                        camera={camera}
-                        canvasSize={canvasSize}
-                        ownedPixels={ownedPixels}
-                        onNavigate={onMiniMapNavigate}
-                        zoomDisplay={zoomDisplay}
-                        cursorNear={cursorNearMinimap}
-                    />
-                    
-                    <div className="flex items-center gap-2 pointer-events-auto">
-                        <div className="glass-card flex items-center gap-1 p-1 rounded-[12px] bg-white/70 border border-[var(--color-border-subtle)]">
-                            <button onClick={() => updateTargetZoom(camera.current.zoom * 0.7)} className="w-8 h-8 flex items-center justify-center rounded-[8px] text-sm hover:bg-white/80 transition-colors">−</button>
-                            <button onClick={() => fitToViewport()} className="px-2 h-8 flex items-center justify-center rounded-[8px] text-[11px] font-semibold hover:bg-white/80 transition-colors w-12">{zoomPercent}%</button>
-                            <button onClick={() => updateTargetZoom(camera.current.zoom * 1.4)} className="w-8 h-8 flex items-center justify-center rounded-[8px] text-sm hover:bg-white/80 transition-colors">+</button>
-                        </div>
-                        <button
-                            onClick={() => setHeatmapVisible(v => !v)}
-                            className={`glass-card p-2 rounded-[12px] transition border border-[var(--color-border-subtle)] bg-white/70 ${heatmapVisible ? 'text-green-600 border-green-500/30' : 'text-[var(--color-text-secondary)] hover:text-black'}`}
-                            title="Toggle heatmap overlay"
-                        >
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M5 20h14a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"></path>
-                                <path d="M12 4v16"></path>
-                            </svg>
-                        </button>
-                    </div>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M5 20h14a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1z"></path>
+                            <path d="M12 4v16"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
 
@@ -1820,6 +1845,6 @@ export default function PixelBoard() {
                 onSubmit={handlePurchase} selectedCount={selectedPixels.size} pricePerPixel={100} isPurchasing={isProcessing}
                 purchaseError={purchaseError} setPurchaseError={setPurchaseError} uploadProgress={uploadProgress}
             />
-        </>
+        </div>
     );
 }

@@ -22,8 +22,8 @@ export default function StatsPanel({ isHUD }) {
                 <div className="h-px bg-[var(--color-border-subtle)] w-full" />
                 
                 <div className="flex items-center justify-between gap-4">
-                    <span className="text-xs text-[var(--color-text-secondary)] font-medium">Volume</span>
-                    <span className="text-sm font-bold text-green-600">₹{(stats.totalPixelsSold * stats.currentPixelPrice).toLocaleString('en-IN')}</span>
+                    <span className="text-xs text-[var(--color-text-secondary)] font-medium">Pixels Sold</span>
+                    <span className="text-sm font-bold text-green-600">{stats.totalPixelsSold.toLocaleString('en-IN')}</span>
                 </div>
 
                 <div className="h-px bg-[var(--color-border-subtle)] w-full" />
